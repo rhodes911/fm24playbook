@@ -1,0 +1,17 @@
+{
+  "id": "base",
+  "version": "1.0.0",
+  "metadata": {
+    "name": "Base Rule Pack",
+    "description": "Defaults seeded from existing playbook; to be expanded via Rules Admin."
+  },
+  "precedence": 0,
+  "rules": {
+    "tone_matrix": { "contexts": [] },
+    "gesture_matrix": { "contexts": [] },
+    "talk_templates": {},
+    "stats_overlay": { "thresholds": {}, "templates_by_stage": {}, "feature_params": {} },
+    "special_overrides": {},
+    "reactions": { "conditions": [] }
+  }
+}
