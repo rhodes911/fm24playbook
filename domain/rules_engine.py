@@ -5,6 +5,8 @@ This module has no Streamlit/UI code and can be tested independently.
 from __future__ import annotations
 
 from typing import List, Optional, Tuple, Dict
+from pathlib import Path
+import json
 from dataclasses import replace
 
 from .models import (
@@ -304,6 +306,37 @@ _TALK_TEMPLATES = {
     },
 }
 
+# Optional normalized mapping from UI: which statements are allowed for each gesture.
+# Structure (indices into the statements lists):
+# {
+#   "PreMatch": { gesture: { tone: [idx, ...] } },
+#   "HalfTime": { "Winning": { gesture: { tone: [idx] } }, ... },
+#   "FullTime": { "Winning": { gesture: { tone: [idx] } }, ... }
+# }
+_GESTURE_STATEMENTS_MAP: Dict[str, Dict] = {}
+try:
+    _norm_fp = Path(__file__).resolve().parent.parent / "data" / "rules" / "normalized" / "gesture_statements.json"
+    if _norm_fp.exists():
+        _GESTURE_STATEMENTS_MAP = json.loads(_norm_fp.read_text(encoding="utf-8"))
+except Exception:
+    _GESTURE_STATEMENTS_MAP = {}
+
+def _allowed_statement_indices(stage: MatchStage, score_state: Optional[ScoreState], gesture: Optional[str], tone: str) -> Optional[List[int]]:
+    if not gesture:
+        return None
+    try:
+        if stage == MatchStage.PRE_MATCH:
+            node = _GESTURE_STATEMENTS_MAP.get("PreMatch", {}).get(gesture, {})
+            return list(node.get(tone, [])) or None
+        key = "HalfTime" if stage == MatchStage.HALF_TIME else ("FullTime" if stage == MatchStage.FULL_TIME else None)
+        if not key or score_state is None:
+            return None
+        node = (((_GESTURE_STATEMENTS_MAP.get(key, {}) or {}).get(score_state.value, {}) or {}).get(gesture, {}) or {})
+        vals = node.get(tone, [])
+        return list(vals) if vals else None
+    except Exception:
+        return None
+
 
 def _gesture_tone(gesture: str) -> str:
     return _GESTURE_TONE.get(gesture, "calm")
@@ -330,6 +363,12 @@ def _select_talk_phrase(context: Context, tone: str, gesture: Optional[str] = No
         if not items:
             return None
         if isinstance(items, list):
+            # If normalized mapping exists for gesture → allowed indices, use it first
+            allowed = _allowed_statement_indices(stage, None, gesture, tone)
+            if allowed:
+                for idx in allowed:
+                    if 0 <= idx < len(items):
+                        return items[idx]
             # Heuristic pick inside the tone bucket
             if tone == "assertive":
                 if context.fav_status == FavStatus.FAVOURITE and context.venue == Venue.HOME:
@@ -352,6 +391,12 @@ def _select_talk_phrase(context: Context, tone: str, gesture: Optional[str] = No
         return None
     # Choose from list if available using light heuristics
     if isinstance(items, list):
+        # Apply normalized allowed indices when present
+        allowed = _allowed_statement_indices(stage, score_state, gesture, tone)
+        if allowed:
+            for idx in allowed:
+                if 0 <= idx < len(items):
+                    return items[idx]
         # Favor anti-complacency lines when favourite and leading
         if score_state == ScoreState.WINNING and context.fav_status == FavStatus.FAVOURITE and tone == "assertive":
             return items[0]

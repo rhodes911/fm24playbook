@@ -119,6 +119,17 @@ class SessionManager:
         session["events"].append(event)
         ACTIVE_FILE.write_text(json.dumps(session, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    def update_context(self, context: Context) -> Dict[str, Any]:
+        """Persist an updated Context into the active session.
+        Returns the updated session data.
+        """
+        if not ACTIVE_FILE.exists():
+            raise RuntimeError("No active session to update.")
+        session = json.loads(ACTIVE_FILE.read_text(encoding="utf-8"))
+        session["context"] = serialize_context(context)
+        ACTIVE_FILE.write_text(json.dumps(session, ensure_ascii=False, indent=2), encoding="utf-8")
+        return session
+
     def complete(self, outcome: Optional[str] = None, notes: Optional[str] = None) -> Dict[str, Any]:
         if not ACTIVE_FILE.exists():
             raise RuntimeError("No active session to complete.")

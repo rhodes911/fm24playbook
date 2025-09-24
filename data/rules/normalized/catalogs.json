@@ -1,0 +1,29 @@
+{
+  "tones": [
+    "calm",
+    "assertive",
+    "motivational",
+    "relaxed",
+    "aggressive"
+  ],
+  "gestures": {
+    "calm": [
+      "No Gesture",
+      "Hands together"
+    ],
+    "assertive": [
+      "Point finger",
+      "Hands on hips"
+    ],
+    "motivational": [
+      "Pump fists",
+      "Outstretched arms"
+    ],
+    "relaxed": [
+      "Hands in pockets"
+    ],
+    "aggressive": [
+      "Thrust arms"
+    ]
+  }
+}

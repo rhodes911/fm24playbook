@@ -1,0 +1,62 @@
+{
+  "PreMatch": {
+    "calm": [
+      "We've got nothing to lose here, we know how good we are, let's show everyone else what we're capable of.",
+      "Good luck out there, we're going to need it.",
+      "I expect a win today.",
+      "I know we are the underdogs here, but go on out there and give the fans a performance to cheer for!",
+      "Nobody is expecting anything from us today so go out there and play without pressure, you've got nothing to lose!",
+      "Nobody expects us to get a result so just go out there and enjoy playing without any pressure on you."
+    ],
+    "assertive": [],
+    "motivational": [],
+    "relaxed": [],
+    "aggressive": []
+  },
+  "HalfTime": {
+    "WINNING": {
+      "calm": [],
+      "assertive": [],
+      "motivational": [],
+      "relaxed": [],
+      "aggressive": []
+    },
+    "DRAWING": {
+      "calm": [],
+      "assertive": [],
+      "motivational": [],
+      "relaxed": [],
+      "aggressive": []
+    },
+    "LOSING": {
+      "calm": [],
+      "assertive": [],
+      "motivational": [],
+      "relaxed": [],
+      "aggressive": []
+    }
+  },
+  "FullTime": {
+    "WINNING": {
+      "calm": [],
+      "assertive": [],
+      "motivational": [],
+      "relaxed": [],
+      "aggressive": []
+    },
+    "DRAWING": {
+      "calm": [],
+      "assertive": [],
+      "motivational": [],
+      "relaxed": [],
+      "aggressive": []
+    },
+    "LOSING": {
+      "calm": [],
+      "assertive": [],
+      "motivational": [],
+      "relaxed": [],
+      "aggressive": []
+    }
+  }
+}
