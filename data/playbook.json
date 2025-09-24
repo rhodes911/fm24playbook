@@ -180,6 +180,17 @@
       }
     },
     {
+      "when": {"stage": "HalfTime", "scoreState": "Losing", "favStatus": "Favourite", "venue": "Away"},
+      "recommendation": {
+        "mentality": "Positive",
+        "teamTalk": "Show me something else in the second half.",
+        "gesture": "Point Finger",
+        "shout": "None",
+        "audience": "Team",
+        "notes": ["Avoid praise here; be firm but constructive", "If 2+ down: consider Thrash Arms"]
+      }
+    },
+    {
       "when": {"stage": "HalfTime", "scoreState": "Losing"},
       "recommendation": {
         "mentality": "Positive",
@@ -377,6 +388,14 @@
         "preMatchUnderdog": {"teamTalk": "No pressure, enjoy it.", "gesture": "Outstretched Arms"},
         "halfTimeLosing": {"teamTalk": "This is your chance to make history.", "gesture": "Pump Fists"},
         "fullTimeWin": {"teamTalk": "Brilliant, enjoy the moment.", "gesture": "Hands Together"}
+      }
+    },
+    {
+      "tag": "Promotion",
+      "overrides": {
+        "fullTimeWin": {"teamTalk": "Congratulations — you've done it. Enjoy this moment.", "gesture": "Hands Together"},
+        "fullTimeDraw": {"teamTalk": "We've clinched it — savour it together.", "gesture": "Hands Together"},
+        "fullTimeLoss": {"teamTalk": "We've still done it — be proud. We'll put the result right next time.", "gesture": "Hands Together"}
       }
     }
   ]

@@ -15,6 +15,60 @@
 			"type": "shell",
 			"command": "streamlit run app.py",
 			"isBackground": true
+		},
+		{
+			"label": "Run unit tests",
+			"type": "shell",
+			"command": "pytest -q",
+			"group": "build"
+		},
+		{
+			"label": "Run unit tests",
+			"type": "shell",
+			"command": "pytest -q",
+			"group": "build"
+		},
+		{
+			"label": "Run unit tests",
+			"type": "shell",
+			"command": "pytest -q",
+			"group": "build"
+		},
+		{
+			"label": "Run unit tests",
+			"type": "shell",
+			"command": "pytest -q",
+			"group": "build"
+		},
+		{
+			"label": "Run unit tests",
+			"type": "shell",
+			"command": "pytest -q",
+			"group": "build"
+		},
+		{
+			"label": "Run unit tests",
+			"type": "shell",
+			"command": "pytest -q",
+			"group": "build"
+		},
+		{
+			"label": "Run unit tests",
+			"type": "shell",
+			"command": "pytest -q",
+			"group": "build"
+		},
+		{
+			"label": "Run unit tests",
+			"type": "shell",
+			"command": "pytest -q",
+			"group": "build"
+		},
+		{
+			"label": "Run unit tests",
+			"type": "shell",
+			"command": "pytest -q",
+			"group": "build"
 		}
 	]
 }

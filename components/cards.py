@@ -30,4 +30,14 @@ def recommendation_card(rec: Recommendation) -> None:
         for n in rec.notes:
             st.write(f"- {n}")
 
+    # Optional metadata: nudges and unit notes
+    if rec.nudges:
+        st.subheader("Nudges")
+        for n in rec.nudges:
+            st.write(f"- {n}")
+    if rec.unit_notes:
+        st.subheader("Unit Notes")
+        for unit, note in rec.unit_notes.items():
+            st.write(f"- {unit}: {note}")
+
     st.markdown("</div>", unsafe_allow_html=True)

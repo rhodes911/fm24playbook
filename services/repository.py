@@ -40,8 +40,45 @@ class PlaybookRepository:
         fp = self.data_dir / "presets.json"
         if fp.exists():
             with fp.open("r", encoding="utf-8") as f:
-                return json.load(f)
+                raw = json.load(f)
+            # Normalize possible legacy/manual shapes
+            norm: List[Dict[str, Any]] = []
+            if isinstance(raw, list):
+                for item in raw:
+                    if not isinstance(item, dict):
+                        continue
+                    name = item.get("name")
+                    data = item.get("data") or item.get("context")
+                    if name and isinstance(data, dict):
+                        norm.append({"name": name, "data": data})
+            return norm
         return []
+
+    def upsert_preset(self, name: str, data: Dict[str, Any]) -> None:
+        fp = self.data_dir / "presets.json"
+        presets: List[Dict[str, Any]] = []
+        if fp.exists():
+            try:
+                with fp.open("r", encoding="utf-8") as f:
+                    presets = json.load(f)
+            except Exception:
+                presets = []
+        # Remove any with same name
+        sanitized: List[Dict[str, Any]] = []
+        for p in presets:
+            if not isinstance(p, dict):
+                continue
+            if "name" not in p:
+                continue
+            if p.get("name") == name:
+                continue  # drop old entry with same name
+            # Keep only fields we understand
+            item = {"name": p.get("name"), "data": p.get("data") or p.get("context")}
+            sanitized.append(item)
+        sanitized.append({"name": name, "data": data})
+        presets = sanitized
+        with fp.open("w", encoding="utf-8") as f:
+            json.dump(presets, f, indent=2, ensure_ascii=False)
 
     def load_policies(self) -> EnginePolicies:
         fp = self.data_dir / "policies.json"

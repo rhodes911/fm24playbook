@@ -20,6 +20,11 @@ class MatchStage(str, Enum):
     LATE = "Late"            # 65-85 minutes
     VERY_LATE = "VeryLate"   # 85+ minutes
     FULL_TIME = "FullTime"
+    # Extra time phases and shootout prep
+    ET_FIRST_HALF = "ET_FirstHalf"
+    ET_HALF_TIME = "ET_HalfTime"
+    ET_SECOND_HALF = "ET_SecondHalf"
+    PRE_SHOOTOUT = "PreShootout"
 
 
 class FavStatus(str, Enum):
@@ -45,6 +50,7 @@ class SpecialSituation(str, Enum):
     """Special match situations"""
     DERBY = "Derby"
     CUP = "Cup"
+    FINAL = "Final"
     PROMOTION = "Promotion"
     RELEGATION = "Relegation"
     DOWN_TO_10 = "DownTo10"
@@ -88,6 +94,8 @@ class TalkAudience(str, Enum):
     MIDFIELD = "Midfield"
     ATTACK = "Attack"
     INDIVIDUAL = "Individual"
+    BENCH = "Bench"
+    LEADERS = "Leaders"
 
 
 @dataclass
@@ -112,6 +120,15 @@ class Context:
     auto_fav_status: bool = False
     # Optional: user-preferred team talk audience at talk stages
     preferred_talk_audience: Optional[TalkAudience] = None
+    # New advanced inputs
+    morale_trend: Optional[int] = None  # -2 (slumping) .. +2 (surging)
+    ht_score_delta: Optional[int] = None  # team_goals - opp_goals at HT
+    xthreat_delta: Optional[float] = None  # momentum proxy: -1.0..+1.0
+    cards_yellow: int = 0
+    cards_red: int = 0
+    injuries: int = 0
+    # Optional unit average ratings for audience segmentation
+    unit_ratings: Optional[Dict[str, float]] = None  # keys: Defence, Midfield, Attack
     
     def __str__(self) -> str:
         """Human-readable context description"""
@@ -148,6 +165,15 @@ class Recommendation:
     shout: Shout
     talk_audience: Optional[TalkAudience] = None
     notes: List[str] = field(default_factory=list)
+    # Additional metadata for rationale and options
+    confidence: float = 0.0  # 0..1 confidence in primary talk+gesture
+    risk: str = "neutral"  # safe | neutral | bold
+    # Safer/bolder alternatives with simple dict entries
+    alternatives: List[Dict[str, Any]] = field(default_factory=list)
+    # Micro-targeted nudges (per-player or unit guidance)
+    nudges: List[str] = field(default_factory=list)
+    # Optional unit-level notes (e.g., "DEF: sympathise")
+    unit_notes: Dict[str, str] = field(default_factory=dict)
     
     @property
     def mentality_value(self) -> int:

@@ -4,15 +4,20 @@ This module has no Streamlit/UI code and can be tested independently.
 """
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from dataclasses import replace
 
 from .models import (
     Context, Recommendation,
     Mentality, Shout,
-    MatchStage, FavStatus, Venue, ScoreState, SpecialSituation,
+    MatchStage, FavStatus, Venue, ScoreState, SpecialSituation, TalkAudience,
+    PlayerReaction,
     PlaybookData, PlaybookRule, ReactionRule, SpecialRule
 )
+from .tone_matrix import select_tones
+from .segmentation import analyze_units
+from .nudges import generate_nudges
+from .synergy import score_synergy, suggest_gestures
 
 MENTALITY_ORDER = [
     Mentality.DEFENSIVE,
@@ -57,59 +62,203 @@ _GESTURE_TONE = {
     "Hands in Pockets": "relaxed",
 }
 
+# Gesture-specific templates for scenarios where FM limits lines by gesture.
+# Only populate where we know the sets; otherwise fall back to tone-based.
+_GESTURE_TEMPLATES: Dict[Tuple[MatchStage, Optional[ScoreState]], Dict[str, List[str]]] = {
+    # Half-Time, losing
+    (MatchStage.HALF_TIME, ScoreState.LOSING): {
+        # Outstretched Arms: supportive/praise/faith (no hard admonishments)
+        "Outstretched Arms": [
+            "It’s time to dig in and give everything — we deserve something from this.",
+            "I know there’s more in here — show what you’re about in the second half.",
+            "You’ve been a bit unlucky so far — keep going and the chance will come.",
+            "Go out there and give these fans their money’s worth.",
+            "You can go out there and play without pressure now.",
+            "The media have given you a lot of credit — go put on a worthy display.",
+            "I’ve got faith in you.",
+        ],
+        # Point Finger: firm/critical prompts
+        "Point Finger": [
+            "Show me something else in the second half.",
+            "Not acceptable so far — sort it out.",
+            "Our shooting hasn’t been good enough — it must improve.",
+            "I’m disappointed — not creative enough and not positive enough.",
+            "Lift the intensity — win more duels and second balls.",
+        ],
+        # Hands Together: calm supportive
+        "Hands Together": [
+            "Stay composed and trust your shape — the chance will come.",
+            "Keep your focus — we’ll turn this if we do the basics well.",
+            "Be brave on the ball but keep our structure.",
+        ],
+        # Hands on Hips: assertive expectations
+        "Hands on Hips": [
+            "I expect more — raise the level.",
+            "You’re better than this — prove it now.",
+        ],
+        # Pump Fists: motivational push
+        "Pump Fists": [
+            "You can turn this around — believe.",
+            "One big effort — go and change it.",
+        ],
+        # Thrash Arms: angry hairdryer (use sparingly)
+        "Thrash Arms": [
+            "Unacceptable — show me a response.",
+        ],
+    }
+}
+
 # Talk templates chosen by stage/score and tone to ensure valid FM combos
 _TALK_TEMPLATES = {
     MatchStage.PRE_MATCH: {
-        "calm": "All the best out there tonight, have fun!",
-        "assertive": "I expect nothing but a win — go out and show your quality.",
-        "motivational": "We can make this ours today — believe and go deliver.",
-        "relaxed": "No pressure today — enjoy your football.",
-        "angry": "I expect better — do not let standards drop.",
+        # Use short, FM-style paraphrases (not verbatim) grouped by tone.
+        "calm": [
+            "All the best out there today, have fun!",
+            "No pressure here — play your football and the result will take care of itself.",
+            "Just go out there, relax and play your natural game.",
+        ],
+        "assertive": [
+            "We’re favourites for a reason — make sure they’re left in no doubt.",
+            "We’re favourites here and I want us to play like it.",
+            "Go out there and give the supporters a performance to cheer for.",
+        ],
+        "motivational": [
+            "Be bold and give the fans something to shout about.",
+            "Play with belief and intensity from the first whistle.",
+        ],
+        "relaxed": [
+            "The pressure’s off — play your natural game.",
+            "Ignore the recent praise in the media and just play your natural game.",
+        ],
+        "angry": [
+            "Standards must be higher — do not let them drop.",
+        ],
     },
     MatchStage.HALF_TIME: {
         ScoreState.WINNING: {
-            "calm": "I'm happy with your performance so far, keep it up.",
-            "assertive": "Don't get complacent — stay focused and finish the job.",
-            "motivational": "You’ve got them — keep pushing!",
-            "relaxed": "Stay composed and keep doing the basics.",
-            "angry": "That dropped off — raise it second half.",
+            "calm": [
+                "I’m pleased so far — keep it going.",
+                "Good first half — stay focused and do the basics well.",
+            ],
+            "assertive": [
+                "Don’t get complacent — see the job through.",
+                "We set the standard — maintain it and finish the job.",
+            ],
+            "motivational": [
+                "You’ve got them — keep pushing!",
+                "One big effort — squeeze the game in our favour.",
+            ],
+            "relaxed": [
+                "Stay composed and do the basics.",
+            ],
+            "angry": [
+                "We dropped off — raise it second half.",
+            ],
         },
         ScoreState.DRAWING: {
-            "calm": "You can go out there and play without pressure now.",
-            "assertive": "I expect more — we can improve.",
-            "motivational": "This game is there for you — go and take it.",
-            "relaxed": "No pressure — play your natural game.",
-            "angry": "Not enough out there — demand higher standards.",
+            "calm": [
+                "No pressure — play without fear.",
+                "Keep your shape and trust your game.",
+            ],
+            "assertive": [
+                "I expect more — we can improve.",
+                "Be sharper — take care in the final action.",
+            ],
+            "motivational": [
+                "This game is there for you — go and take it.",
+                "Believe — the breakthrough is coming.",
+            ],
+            "relaxed": [
+                "Relax and play your natural game.",
+            ],
+            "angry": [
+                "Not enough — standards higher.",
+            ],
         },
         ScoreState.LOSING: {
-            "calm": "Keep your heads — we can still get back into this.",
-            "assertive": "That wasn't good enough — I expect a reaction.",
-            "motivational": "You can still turn this around — believe.",
-            "relaxed": "Reset, trust your game and take the next chance.",
-            "angry": "Unacceptable first half — show me a response.",
+            "calm": [
+                "I know there’s more in here — show what you’re about in the second half.",
+                "It’s time to dig in and give everything — we deserve something from this.",
+                "You’ve been a bit unlucky so far — keep going and the chance will come.",
+            ],
+            "assertive": [
+                "Show me something else in the second half.",
+                "Not acceptable so far — sort it out.",
+                "Finishing hasn’t been good enough — it must improve.",
+                "I’m disappointed — not creative enough and not positive enough.",
+                "That wasn’t good enough — I expect a reaction.",
+                "Lift the intensity — win more duels and second balls.",
+            ],
+            "motivational": [
+                "You can turn this around — believe.",
+                "This is there for you — go and change it.",
+            ],
+            "relaxed": [
+                "Reset, trust your game and take the next chance.",
+            ],
+            "angry": [
+                "Unacceptable first half — show me a response.",
+            ],
         },
     },
     MatchStage.FULL_TIME: {
         ScoreState.WINNING: {
-            "calm": "Well done — a good win.",
-            "assertive": "Good — but don’t let standards slip next match.",
-            "motivational": "Brilliant — enjoy it and build on it.",
-            "relaxed": "Enjoy the moment — you earned it.",
-            "angry": "We won, but the standards weren’t there.",
+            "calm": [
+                "Well done — a good win.",
+                "Solid win — take the positives and recover well.",
+            ],
+            "assertive": [
+                "Good — but don’t let standards slip next time.",
+                "Job done — standards stay high for the next one.",
+            ],
+            "motivational": [
+                "Brilliant — enjoy it and build on it.",
+                "Great performance — take this momentum forward.",
+            ],
+            "relaxed": [
+                "Enjoy the moment — you earned it.",
+            ],
+            "angry": [
+                "We won, but the standards weren’t there.",
+            ],
         },
         ScoreState.DRAWING: {
-            "calm": "A fair result — take the point and move on.",
-            "assertive": "We should have done more — be sharper next time.",
-            "motivational": "Plenty to build on — take this into the next one.",
-            "relaxed": "Take the positives and recover well.",
-            "angry": "Not the level we expect.",
+            "calm": [
+                "A fair result — take the point and move on.",
+                "Plenty to learn — we move on together.",
+            ],
+            "assertive": [
+                "We should have done more — be sharper next time.",
+                "Not the level required — raise it next match.",
+            ],
+            "motivational": [
+                "Plenty to build on — take this into the next one.",
+            ],
+            "relaxed": [
+                "Take the positives and recover well.",
+            ],
+            "angry": [
+                "Not the level we expect.",
+            ],
         },
         ScoreState.LOSING: {
-            "calm": "Keep your heads up — learn and go again.",
-            "assertive": "That wasn’t good enough — expect a reaction next time.",
-            "motivational": "We’ll put it right — together.",
-            "relaxed": "Recover well and we go again.",
-            "angry": "Unacceptable — we must be better.",
+            "calm": [
+                "Keep your heads up — learn and go again.",
+                "Reset and be ready to respond in the next one.",
+            ],
+            "assertive": [
+                "Not good enough — I expect a reaction next time.",
+                "That level isn’t acceptable — show a response.",
+            ],
+            "motivational": [
+                "We’ll put it right — together.",
+            ],
+            "relaxed": [
+                "Recover well and we go again.",
+            ],
+            "angry": [
+                "Unacceptable — we must be better.",
+            ],
         },
     },
 }
@@ -119,18 +268,66 @@ def _gesture_tone(gesture: str) -> str:
     return _GESTURE_TONE.get(gesture, "calm")
 
 
-def _select_talk_phrase(stage: MatchStage, score_state: Optional[ScoreState], tone: str) -> Optional[str]:
+def _select_talk_phrase(context: Context, tone: str, gesture: Optional[str] = None) -> Optional[str]:
+    stage = context.stage
+    score_state = context.score_state
+    # Prefer gesture-specific templates when available for this stage/score
+    if gesture:
+        gtbl = _GESTURE_TEMPLATES.get((stage, score_state)) or _GESTURE_TEMPLATES.get((stage, None))
+        if gtbl is not None and gesture in gtbl:
+            items = gtbl[gesture]
+            if items:
+                # Light heuristic: when away and losing, prefer "dig in" supportive second line for OA
+                if stage == MatchStage.HALF_TIME and score_state == ScoreState.LOSING and gesture == "Outstretched Arms" and context.venue == Venue.AWAY and len(items) >= 2:
+                    return items[0] if context.fav_status == FavStatus.FAVOURITE else items[1]
+                return items[0]
     tbl = _TALK_TEMPLATES.get(stage)
     if not tbl:
         return None
     if stage == MatchStage.PRE_MATCH:
-        return tbl.get(tone)  # type: ignore[attr-defined]
+        items = tbl.get(tone)  # type: ignore[attr-defined]
+        if not items:
+            return None
+        if isinstance(items, list):
+            # Heuristic pick inside the tone bucket
+            if tone == "assertive":
+                if context.fav_status == FavStatus.FAVOURITE and context.venue == Venue.HOME:
+                    # Prefer home-flavoured assertive line (index 1)
+                    return items[1]
+                if context.fav_status == FavStatus.FAVOURITE and context.venue == Venue.AWAY and len(items) >= 3:
+                    # Prefer away-flavoured assertive line (index 2)
+                    return items[2]
+            # Fall back to the first option for the tone
+            return items[0]
+        # Legacy single-string path
+        return items
     if score_state is None:
         return None
     stage_tbl = tbl.get(score_state)  # type: ignore[index]
     if not stage_tbl:
         return None
-    return stage_tbl.get(tone)
+    items = stage_tbl.get(tone)
+    if items is None:
+        return None
+    # Choose from list if available using light heuristics
+    if isinstance(items, list):
+        # Favor anti-complacency lines when favourite and leading
+        if score_state == ScoreState.WINNING and context.fav_status == FavStatus.FAVOURITE and tone == "assertive":
+            return items[0]
+        # Away losing: prefer supportive phrasing in calm/motivational
+        if score_state == ScoreState.LOSING and context.venue == Venue.AWAY:
+            if tone in ("calm", "motivational"):
+                # Prefer the second calm line which maps to "dig in and give everything" wording
+                if tone == "calm" and len(items) >= 2:
+                    return items[1]
+                return items[0]
+        # Half-time losing and either favourite or 2+ down: prefer assertive first option
+        if stage == MatchStage.HALF_TIME and score_state == ScoreState.LOSING and tone == "assertive":
+            if context.fav_status == FavStatus.FAVOURITE or (context.ht_score_delta is not None and context.ht_score_delta <= -2):
+                return items[0]
+        # Default to first paraphrase
+        return items[0]
+    return items
 
 
 def harmonize_talk_with_gesture(context: Context, rec: Recommendation) -> Recommendation:
@@ -140,10 +337,98 @@ def harmonize_talk_with_gesture(context: Context, rec: Recommendation) -> Recomm
     """
     if context.stage not in (MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME):
         return rec
+    # If a special override has already provided a concrete phrase, keep it.
+    if rec.team_talk and rec.team_talk.strip():
+        return rec
     tone = _gesture_tone(rec.gesture)
-    phrase = _select_talk_phrase(context.stage, context.score_state, tone)
+    phrase = _select_talk_phrase(context, tone, rec.gesture)
     if phrase:
         return replace(rec, team_talk=phrase)
+    return rec
+
+
+def _is_praise_context(context: Context) -> bool:
+    """Rough heuristic for when praise-style calm talk is appropriate.
+
+    - Winning (any stage) or
+    - FullTime when underdog draws/wins away.
+    """
+    if context.score_state == ScoreState.WINNING:
+        return True
+    if context.stage == MatchStage.FULL_TIME and context.venue == Venue.AWAY and context.fav_status == FavStatus.UNDERDOG:
+        if context.score_state in (ScoreState.DRAWING, ScoreState.WINNING):
+            return True
+    # Promotion/title clinched: celebratory tone regardless of venue/fav
+    if SpecialSituation.PROMOTION in context.special_situations and context.stage == MatchStage.FULL_TIME:
+        return True
+    return False
+
+
+def adjust_gesture_for_context(context: Context, rec: Recommendation) -> Recommendation:
+    """Decision matrix for gestures at talk stages, aligned with FM availability.
+
+    Core principles:
+    - Outstretched Arms (OA) is reserved for praise/faith messages; avoid when trailing.
+    - Point Finger / Hands on Hips carry assertive lines (demand more / show me more).
+    - Hands Together is the safe calm-supportive option when behind.
+
+    Matrix (talk stages only):
+    - PreMatch:
+        * Favourite → Point Finger
+        * Underdog → Hands Together (avoid OA framing pre-match)
+    - HalfTime:
+        * Losing → Favourite: Point Finger (if <= -2: Thrash Arms)
+                  → Underdog: Hands Together
+        * Drawing → Favourite: Point Finger; Underdog: Hands Together
+        * Winning → Hands Together (if complacent reaction present then Point Finger)
+    - FullTime:
+        * Winning → Hands Together
+        * Drawing → Favourite: Hands on Hips; Underdog: Outstretched Arms
+        * Losing → Favourite: Thrash Arms; Underdog: Hands Together
+    Additionally, if a resulting gesture is OA in a non‑praise context, switch to Hands Together.
+    """
+    if context.stage not in (MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME):
+        return rec
+
+    g = rec.gesture
+    # PreMatch
+    if context.stage == MatchStage.PRE_MATCH:
+        g = "Point Finger" if context.fav_status == FavStatus.FAVOURITE else "Hands Together"
+
+    # HalfTime
+    elif context.stage == MatchStage.HALF_TIME:
+        if context.score_state == ScoreState.LOSING:
+            if context.fav_status == FavStatus.FAVOURITE:
+                if context.ht_score_delta is not None and context.ht_score_delta <= -2:
+                    g = "Thrash Arms"
+                else:
+                    g = "Point Finger"
+            else:
+                g = "Hands Together"
+        elif context.score_state == ScoreState.DRAWING:
+            g = "Point Finger" if context.fav_status == FavStatus.FAVOURITE else "Hands Together"
+        elif context.score_state == ScoreState.WINNING:
+            # Default praise; if complacent in reactions, go assertive
+            if "Complacent" in context.player_reactions:
+                g = "Point Finger"
+            else:
+                g = "Hands Together"
+
+    # FullTime
+    elif context.stage == MatchStage.FULL_TIME:
+        if context.score_state == ScoreState.WINNING:
+            g = "Hands Together"
+        elif context.score_state == ScoreState.DRAWING:
+            g = "Hands on Hips" if context.fav_status == FavStatus.FAVOURITE else "Outstretched Arms"
+        elif context.score_state == ScoreState.LOSING:
+            g = "Thrash Arms" if context.fav_status == FavStatus.FAVOURITE else "Hands Together"
+
+    # Avoid OA when it isn't clearly a praise/faith context
+    if g == "Outstretched Arms" and not _is_praise_context(context):
+        g = "Hands Together"
+
+    if g != rec.gesture:
+        return replace(rec, gesture=g)
     return rec
 
 
@@ -430,6 +715,10 @@ def apply_special_overrides(context: Context, rec: Recommendation, specials: Lis
         elif context.stage == MatchStage.FULL_TIME:
             if context.score_state == ScoreState.WINNING:
                 key = "fullTimeWin"
+            elif context.score_state == ScoreState.DRAWING:
+                key = "fullTimeDraw"
+            elif context.score_state == ScoreState.LOSING:
+                key = "fullTimeLoss"
         
         if key and key in s.overrides:
             ov = s.overrides[key]
@@ -505,9 +794,80 @@ def recommend(context: Context, playbook: PlaybookData) -> Optional[Recommendati
     with_shout = choose_inplay_shout(context, with_stats)
     with_time = apply_time_score_heuristics(context, with_shout)
     final = apply_reaction_adjustments(context, with_time, playbook.reactions)
+    # Post-adjust gesture to avoid praise-coded OA when behind and pick assertive for favourites
+    final = adjust_gesture_for_context(context, final)
     final = harmonize_talk_with_gesture(context, final)
     final = enforce_prematch_mentality_cap(context, final)
     # If user selected a preferred talk audience at talk stages, override
     if context.stage in (MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME) and context.preferred_talk_audience:
         final.talk_audience = context.preferred_talk_audience
+    # Tone matrix metadata (ranked tones and disallow list)
+    try:
+        tone_weights, disallow = select_tones(context)
+        # Derive a simple confidence from top tone weight; map risk by aggressiveness
+        if tone_weights:
+            top_tone, top_w = max(tone_weights.items(), key=lambda x: x[1])
+            # Combine tone certainty and gesture synergy for confidence
+            syn = score_synergy(top_tone, final.gesture, context)
+            final.confidence = round(min(1.0, 0.6 * top_w + 0.4 * syn), 3)
+            # risk: bold if assertive/angry top and weight >= 0.45, safe if calm/encourage top
+            if top_tone in ("assertive", "angry") and final.confidence >= 0.45:
+                final.risk = "bold"
+            elif top_tone in ("calm", "encourage", "relaxed"):
+                final.risk = "safe"
+            else:
+                final.risk = "neutral"
+            # Suggest safer/bolder gesture-tone alternatives (metadata only)
+            # Trailing at half-time as a favourite (esp. away): avoid suggesting Encourage to prevent "praise" vibes.
+            safer_candidates = ("calm", "encourage")
+            if context.stage == MatchStage.HALF_TIME and context.score_state == ScoreState.LOSING and context.fav_status == FavStatus.FAVOURITE:
+                safer_candidates = ("calm",)
+            safer = [
+                {"tone": t, "gestures": suggest_gestures(t)} for t in safer_candidates if t not in disallow
+            ]
+            bolder = [
+                {"tone": t, "gestures": suggest_gestures(t)} for t in ("assertive", "angry") if t not in disallow
+            ]
+            # Filter OA when not a praise context
+            if not _is_praise_context(context):
+                for group in (safer, bolder):
+                    for entry in group:
+                        entry["gestures"] = [g for g in entry["gestures"] if g != "Outstretched Arms"]
+            if safer:
+                final.alternatives.append({"type": "safer", "tones": safer})
+            if bolder:
+                final.alternatives.append({"type": "bolder", "tones": bolder})
+            # Add a brief rationale preview
+            final.notes.append(f"Tone mix: {', '.join(f'{k}:{v}' for k,v in sorted(tone_weights.items()))}")
+            if disallow:
+                final.notes.append("Disallow: " + ", ".join(disallow))
+            # Clarify why Encourage is blocked in a common case users question
+            if (
+                context.stage == MatchStage.HALF_TIME
+                and context.venue == Venue.AWAY
+                and context.fav_status == FavStatus.FAVOURITE
+                and context.ht_score_delta is not None and context.ht_score_delta < 0
+                and "encourage" in disallow
+            ):
+                final.notes.append("Away favourite trailing at HT: avoid praise/encourage — go calm/supportive or firm.")
+    except Exception:
+        # Non-fatal: metadata only
+        pass
+    # Populate unit segmentation and nudges metadata
+    try:
+        final.unit_notes = analyze_units(context)
+        final.nudges = generate_nudges(context)
+    except Exception:
+        pass
+    # Reaction-aware extra notes (explicit callouts for assertive HT losing scenarios)
+    if (
+        (context.stage == MatchStage.HALF_TIME and context.score_state == ScoreState.LOSING and final.gesture in ("Point Finger", "Hands on Hips"))
+        or ("Show me something else in the second half." in final.team_talk)
+    ):
+        if any(r in context.player_reactions for r in (PlayerReaction.NERVOUS,)):
+            final.notes.append("Nervous player: consider a quick individual faith talk (OA: 'I've got faith in you.') to settle them.")
+        final.notes.append("For your composed striker: Pump Fists — 'You can make the difference.'")
+    # Default talk audience to Team at talk stages if not set
+    if context.stage in (MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME) and not final.talk_audience:
+        final.talk_audience = TalkAudience.TEAM
     return final
