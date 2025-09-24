@@ -1,0 +1,15 @@
+[
+  {
+    "name": "Pre-Match Favourite Home",
+    "description": "You are favourites at home before kickoff.",
+    "context": {
+      "stage": "PreMatch",
+      "fav_status": "Favourite",
+      "venue": "Home",
+      "score_state": null,
+      "special_situations": [],
+      "player_reactions": []
+    },
+    "tags": ["PreMatch", "Favourite", "Home"]
+  }
+]

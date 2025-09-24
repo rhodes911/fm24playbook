@@ -1,0 +1,7 @@
+{
+  "calm": ["Hands Together", "Outstretched Arms"],
+  "assertive": ["Point Finger", "Hands on Hips"],
+  "angry": ["Thrash Arms"],
+  "motivational": ["Pump Fists"],
+  "relaxed": ["Hands in Pockets"]
+}

@@ -1,0 +1,383 @@
+{
+  "$schema": "https://example.com/fm24-playbook.schema.json",
+  "version": "1.0.0",
+  "gestures": [
+    "Point Finger",
+    "Hands on Hips",
+    "Outstretched Arms",
+    "Hands Together",
+    "Pump Fists",
+    "Thrash Arms"
+  ],
+  "rules": [
+    {
+      "when": {"stage": "PreMatch", "favStatus": "Favourite", "venue": "Home"},
+      "recommendation": {
+        "mentality": "Positive",
+        "teamTalk": "We should be winning this — go out and show why.",
+        "gesture": "Point Finger",
+        "shout": "None",
+        "audience": "Team",
+        "notes": [
+          "Set expectations without overhyping",
+          "Individually tell strikers: You can make the difference (Pump Fists)"
+        ]
+      }
+    },
+    {
+      "when": {"stage": "PreMatch", "favStatus": "Favourite", "venue": "Away"},
+      "recommendation": {
+        "mentality": "Balanced",
+        "teamTalk": "We should be winning this — go out and show why.",
+        "gesture": "Point Finger",
+        "shout": "None",
+        "audience": "Team",
+        "notes": ["Be assertive without overcommitting early"]
+      }
+    },
+    {
+      "when": {"stage": "PreMatch", "favStatus": "Underdog", "venue": "Away"},
+      "recommendation": {
+        "mentality": "Cautious",
+        "teamTalk": "No pressure, go out and enjoy it.",
+        "gesture": "Outstretched Arms",
+        "shout": "None",
+        "audience": "Team",
+        "notes": [
+          "Remove fear, frame opportunity",
+          "Call out complacent players individually (Hands on Hips)"
+        ]
+      }
+    },
+    {
+      "when": {"stage": "PreMatch", "favStatus": "Underdog", "venue": "Home"},
+      "recommendation": {
+        "mentality": "Balanced",
+        "teamTalk": "No pressure, go out and enjoy it.",
+        "gesture": "Outstretched Arms",
+        "shout": "None",
+        "audience": "Team",
+        "notes": ["Lean on crowd energy, keep shape early"]
+      }
+    },
+
+    {
+      "when": {"stage": "Early", "scoreState": "Winning"},
+      "recommendation": {
+        "mentality": "Balanced",
+        "teamTalk": "Stay focused after the goal.",
+        "gesture": "Point Finger",
+        "shout": "Focus",
+        "notes": ["Don't rush restarts", "Avoid complacency"]
+      }
+    },
+    {
+      "when": {"stage": "Early", "scoreState": "Drawing", "favStatus": "Favourite"},
+      "recommendation": {
+        "mentality": "Positive",
+        "teamTalk": "Keep pushing for the breakthrough.",
+        "gesture": "Pump Fists",
+        "shout": "Demand More",
+        "notes": [
+          "Check player reactions and body language",
+          "Plan individual talks if complacent or nervous"
+        ]
+      }
+    },
+    {
+      "when": {"stage": "Early", "scoreState": "Drawing", "favStatus": "Underdog"},
+      "recommendation": {
+        "mentality": "Cautious",
+        "teamTalk": "Keep your shape and stay calm.",
+        "gesture": "Outstretched Arms",
+        "shout": "Encourage",
+        "notes": ["Under pressure: stay compact", "Release on breaks"]
+      }
+    },
+    {
+      "when": {"stage": "Early", "scoreState": "Losing"},
+      "recommendation": {
+        "mentality": "Cautious",
+        "teamTalk": "Settle down and keep structure.",
+        "gesture": "Outstretched Arms",
+        "shout": "Encourage",
+        "notes": ["Don't chase too early", "Limit risky passes"]
+      }
+    },
+
+    {
+      "when": {"stage": "Mid", "scoreState": "Drawing"},
+      "recommendation": {
+        "mentality": "Positive",
+        "teamTalk": "We can step it up — push for more.",
+        "gesture": "Pump Fists",
+        "shout": "Demand More",
+        "notes": ["Add runners beyond the line", "Consider overlap if safe"]
+      }
+    },
+    {
+      "when": {"stage": "Mid", "scoreState": "Winning"},
+      "recommendation": {
+        "mentality": "Balanced",
+        "teamTalk": "Concentrate and manage the half.",
+        "gesture": "Point Finger",
+        "shout": "Focus",
+        "notes": ["Cut out sloppy passes", "Protect transitions"]
+      }
+    },
+    {
+      "when": {"stage": "Mid", "scoreState": "Losing"},
+      "recommendation": {
+        "mentality": "Positive",
+        "teamTalk": "Believe — we can turn this around.",
+        "gesture": "Outstretched Arms",
+        "shout": "Encourage",
+        "notes": ["Commit extra body situationally", "Target weak fullback"]
+      }
+    },
+    {
+      "when": {"stage": "Mid", "scoreState": "Drawing", "special": ["Cup", "Derby"]},
+      "recommendation": {
+        "mentality": "Attacking",
+        "teamTalk": "Raise the intensity.",
+        "gesture": "Pump Fists",
+        "shout": "Fire Up",
+        "notes": ["Back line higher if safe", "Press trigger: after backpass"]
+      }
+    },
+
+    {
+      "when": {"stage": "HalfTime", "scoreState": "Winning"},
+      "recommendation": {
+        "mentality": "Balanced",
+        "teamTalk": "Don't get complacent — keep working.",
+        "gesture": "Point Finger",
+        "shout": "None",
+        "audience": "Team",
+        "notes": ["Keep standards high", "If 2+ up: slow down slightly (Hands Together)"]
+      }
+    },
+    {
+      "when": {"stage": "HalfTime", "scoreState": "Drawing", "favStatus": "Favourite"},
+      "recommendation": {
+        "mentality": "Balanced",
+        "teamTalk": "I expect more — we can improve.",
+        "gesture": "Outstretched Arms",
+        "shout": "None",
+        "audience": "Team",
+        "notes": ["Raise tempo next 10' then reassess"]
+      }
+    },
+    {
+      "when": {"stage": "HalfTime", "scoreState": "Drawing", "favStatus": "Underdog"},
+      "recommendation": {
+        "mentality": "Positive",
+        "teamTalk": "We've been the better side, keep pushing.",
+        "gesture": "Pump Fists",
+        "shout": "None",
+        "audience": "Team",
+        "notes": ["Lean into strengths, stay brave"]
+      }
+    },
+    {
+      "when": {"stage": "HalfTime", "scoreState": "Losing"},
+      "recommendation": {
+        "mentality": "Positive",
+        "teamTalk": "We can turn this around, believe in yourselves.",
+        "gesture": "Outstretched Arms",
+        "shout": "None",
+        "audience": "Team",
+        "notes": ["If 2+ down: stronger words (Thrash Arms)", "Fresh legs early if needed"]
+      }
+    },
+
+    {
+      "when": {"stage": "Late", "scoreState": "Winning"},
+      "recommendation": {
+        "mentality": "Cautious",
+        "teamTalk": "Manage the game and concentrate.",
+        "gesture": "Point Finger",
+        "shout": "Focus",
+        "notes": ["Time management without cynicism", "Drop one line slightly"]
+      }
+    },
+    {
+      "when": {"stage": "Late", "scoreState": "Drawing", "favStatus": "Favourite"},
+      "recommendation": {
+        "mentality": "Attacking",
+        "teamTalk": "Go and win it.",
+        "gesture": "Pump Fists",
+        "shout": "Demand More",
+        "notes": ["Overlap one side", "Fresh attacking runner"]
+      }
+    },
+    {
+      "when": {"stage": "Late", "scoreState": "Drawing", "favStatus": "Underdog"},
+      "recommendation": {
+        "mentality": "Cautious",
+        "teamTalk": "Stay solid and look for the moment.",
+        "gesture": "Outstretched Arms",
+        "shout": "Encourage",
+        "notes": ["Counter when they overcommit"]
+      }
+    },
+    {
+      "when": {"stage": "Late", "scoreState": "Losing"},
+      "recommendation": {
+        "mentality": "Attacking",
+        "teamTalk": "Lift it — we can get this.",
+        "gesture": "Pump Fists",
+        "shout": "Fire Up",
+        "notes": ["Push FB on one side", "Add second striker if available"]
+      }
+    },
+
+    {
+      "when": {"stage": "VeryLate", "scoreState": "Winning"},
+      "recommendation": {
+        "mentality": "Cautious",
+        "teamTalk": "Stay switched on to the end.",
+        "gesture": "Point Finger",
+        "shout": "Focus",
+        "notes": ["Slow tempo", "Keep it in their half when safe"]
+      }
+    },
+    {
+      "when": {"stage": "VeryLate", "scoreState": "Drawing", "favStatus": "Favourite"},
+      "recommendation": {
+        "mentality": "Attacking",
+        "teamTalk": "One more big push.",
+        "gesture": "Pump Fists",
+        "shout": "Demand More",
+        "notes": ["Throw on pace", "Direct balls into channels"]
+      }
+    },
+    {
+      "when": {"stage": "VeryLate", "scoreState": "Losing"},
+      "recommendation": {
+        "mentality": "Attacking",
+        "teamTalk": "Everything forward now.",
+        "gesture": "Pump Fists",
+        "shout": "Demand More",
+        "notes": ["Leave 1v1 at back if needed", "Aim for early crosses"]
+      }
+    },
+    {
+      "when": {"stage": "VeryLate", "scoreState": "Losing", "special": ["Cup"]},
+      "recommendation": {
+        "mentality": "Very Attacking",
+        "teamTalk": "Make yourselves heroes.",
+        "gesture": "Pump Fists",
+        "shout": "Fire Up",
+        "notes": ["Flood box", "Second balls focus"]
+      }
+    },
+
+    {
+      "when": {"stage": "FullTime", "scoreState": "Winning", "favStatus": "Favourite"},
+      "recommendation": {
+        "mentality": "Balanced",
+        "teamTalk": "Great job, well played.",
+        "gesture": "Hands Together",
+        "shout": "None",
+        "audience": "Team",
+        "notes": ["Praise standouts, challenge standards quietly if scrappy"]
+      }
+    },
+    {
+      "when": {"stage": "FullTime", "scoreState": "Winning", "favStatus": "Underdog"},
+      "recommendation": {
+        "mentality": "Balanced",
+        "teamTalk": "Brilliant result — enjoy it.",
+        "gesture": "Hands Together",
+        "shout": "None",
+        "audience": "Team",
+        "notes": ["Acknowledge effort from everyone"]
+      }
+    },
+    {
+      "when": {"stage": "FullTime", "scoreState": "Drawing", "favStatus": "Favourite"},
+      "recommendation": {
+        "mentality": "Balanced",
+        "teamTalk": "Not good enough — we should've won.",
+        "gesture": "Hands on Hips",
+        "shout": "None",
+        "audience": "Team",
+        "notes": ["Keep it measured; avoid public blame"]
+      }
+    },
+    {
+      "when": {"stage": "FullTime", "scoreState": "Drawing", "favStatus": "Underdog"},
+      "recommendation": {
+        "mentality": "Balanced",
+        "teamTalk": "Well done, solid result.",
+        "gesture": "Outstretched Arms",
+        "shout": "None",
+        "audience": "Team",
+        "notes": ["Praise defensive effort"]
+      }
+    },
+    {
+      "when": {"stage": "FullTime", "scoreState": "Losing", "favStatus": "Favourite"},
+      "recommendation": {
+        "mentality": "Balanced",
+        "teamTalk": "That wasn't good enough — I expect better.",
+        "gesture": "Thrash Arms",
+        "shout": "None",
+        "audience": "Team",
+        "notes": ["Be direct but fair; protect morale of youngsters"]
+      }
+    },
+    {
+      "when": {"stage": "FullTime", "scoreState": "Losing", "favStatus": "Underdog"},
+      "recommendation": {
+        "mentality": "Balanced",
+        "teamTalk": "Unlucky — keep your heads up.",
+        "gesture": "Outstretched Arms",
+        "shout": "None",
+        "audience": "Team",
+        "notes": ["Highlight positives and work-ons"]
+      }
+    }
+  ],
+  "reactions": [
+    {
+      "reaction": "Complacent",
+      "adjustment": {
+        "teamTalk": "Don't get complacent — keep working.",
+        "gesture": "Point Finger",
+        "shout": "Demand More",
+        "mentalityDelta": 0,
+        "notes": ["Challenge effort, not ability", "Avoid over-praise"]
+      }
+    },
+    {
+      "reaction": "Nervous",
+      "adjustment": {
+        "teamTalk": "I've got faith in you.",
+        "gesture": "Outstretched Arms",
+        "shout": "Encourage",
+        "mentalityDelta": -1,
+        "notes": ["Reduce pressure", "Keep structure (Balanced/Cautious)"]
+      }
+    }
+  ],
+  "special": [
+    {
+      "tag": "Derby",
+      "overrides": {
+        "preMatch": {"teamTalk": "Do it for the fans.", "gesture": "Pump Fists"},
+        "halfTimeLead": {"teamTalk": "Don't let this slip.", "gesture": "Point Finger"},
+        "fullTimeWin": {"teamTalk": "You've made the fans proud.", "gesture": "Hands Together"}
+      }
+    },
+    {
+      "tag": "Cup",
+      "overrides": {
+        "preMatchUnderdog": {"teamTalk": "No pressure, enjoy it.", "gesture": "Outstretched Arms"},
+        "halfTimeLosing": {"teamTalk": "This is your chance to make history.", "gesture": "Pump Fists"},
+        "fullTimeWin": {"teamTalk": "Brilliant, enjoy the moment.", "gesture": "Hands Together"}
+      }
+    }
+  ]
+}

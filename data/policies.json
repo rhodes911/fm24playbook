@@ -1,0 +1,8 @@
+{
+  "version": "1.0.0",
+  "preMatchMaxMentality": "Positive",
+  "positionGapBucket": 8,
+  "formDiffBucket": 2,
+  "homeAdvantageBonus": 1,
+  "inPlayShoutHeuristic": true
+}
