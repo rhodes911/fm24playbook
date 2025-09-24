@@ -62,5 +62,59 @@
       "auto_fav_status": true,
       "preferred_talk_audience": null
     }
+  },
+  {
+    "name": "first",
+    "data": {
+      "stage": "Early",
+      "fav_status": "Underdog",
+      "venue": "Away",
+      "score_state": null,
+      "special_situations": [],
+      "player_reactions": [],
+      "minute": 0,
+      "possession_pct": null,
+      "shots_for": null,
+      "shots_against": null,
+      "shots_on_target_for": null,
+      "shots_on_target_against": null,
+      "xg_for": null,
+      "xg_against": null,
+      "team_position": null,
+      "opponent_position": null,
+      "team_form": null,
+      "opponent_form": null,
+      "team_goals": 0,
+      "opponent_goals": 0,
+      "auto_fav_status": false,
+      "preferred_talk_audience": null
+    }
+  },
+  {
+    "name": "start",
+    "data": {
+      "stage": "PreMatch",
+      "fav_status": "Underdog",
+      "venue": "Away",
+      "score_state": null,
+      "special_situations": [],
+      "player_reactions": [],
+      "minute": 0,
+      "possession_pct": null,
+      "shots_for": null,
+      "shots_against": null,
+      "shots_on_target_for": null,
+      "shots_on_target_against": null,
+      "xg_for": null,
+      "xg_against": null,
+      "team_position": null,
+      "opponent_position": null,
+      "team_form": null,
+      "opponent_form": null,
+      "team_goals": 0,
+      "opponent_goals": 0,
+      "auto_fav_status": false,
+      "preferred_talk_audience": null
+    }
   }
 ]

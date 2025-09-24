@@ -107,6 +107,15 @@ class Context:
     score_state: Optional[ScoreState] = None
     special_situations: List[SpecialSituation] = field(default_factory=list)
     player_reactions: List[PlayerReaction] = field(default_factory=list)
+    # Time and live match stats (optional)
+    minute: Optional[int] = None  # 0-120 inclusive (ET supported)
+    possession_pct: Optional[float] = None  # 0-100
+    shots_for: Optional[int] = None
+    shots_against: Optional[int] = None
+    shots_on_target_for: Optional[int] = None
+    shots_on_target_against: Optional[int] = None
+    xg_for: Optional[float] = None
+    xg_against: Optional[float] = None
     # Optional league/table context
     team_position: Optional[int] = None
     opponent_position: Optional[int] = None
@@ -133,6 +142,19 @@ class Context:
     def __str__(self) -> str:
         """Human-readable context description"""
         parts = [self.fav_status.value, self.venue.value]
+        # Minute marker if available
+        if isinstance(self.minute, int):
+            # Map notable breakpoints for readability
+            if self.minute == 45:
+                parts.insert(0, "45' HT")
+            elif self.minute == 90:
+                parts.insert(0, "90' FT")
+            elif self.minute == 105:
+                parts.insert(0, "105' ET HT")
+            elif self.minute == 120:
+                parts.insert(0, "120' ET FT")
+            else:
+                parts.insert(0, f"{self.minute}'")
         if self.score_state:
             parts.append(self.score_state.value)
         if self.special_situations and self.special_situations != [SpecialSituation.NONE]:
@@ -140,6 +162,24 @@ class Context:
         # Scoreline if available
         if self.team_goals is not None and self.opponent_goals is not None:
             parts.insert(0, f"{self.team_goals}–{self.opponent_goals}")
+        # Compact live stats if provided
+        sf = self.shots_for
+        sa = self.shots_against
+        sof = self.shots_on_target_for
+        soa = self.shots_on_target_against
+        poss = self.possession_pct
+        live_bits = []
+        if isinstance(poss, (int, float)):
+            live_bits.append(f"Poss {int(round(poss))}%")
+        if sf is not None or sa is not None:
+            if sof is not None or soa is not None:
+                live_bits.append(
+                    f"Shots {sf or 0}({sof or 0}) vs {sa or 0}({soa or 0})"
+                )
+            else:
+                live_bits.append(f"Shots {sf or 0} vs {sa or 0}")
+        if live_bits:
+            parts.append(" • ".join(live_bits))
         # Append compact league context if provided
         pos = []
         if self.team_position is not None:

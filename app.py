@@ -45,15 +45,11 @@ st.markdown("""
 def main():
     """Main application entry point"""
     st.title("⚽ FM24 Matchday Playbook")
-    st.markdown("### Navigate to different sections using the sidebar")
-    
+    st.markdown("### Use the Playbook page from the sidebar to get recommendations.")
     st.info("""
     Welcome to the FM24 Matchday Playbook! This tool helps you make tactical decisions during matches.
     
-    📋 **Playbook** - Get recommendations based on match context  
-    🎯 **Scenarios** - Quick-pick common situations  
-    ✏️ **Editor** - Modify playbook rules (optional)  
-    ℹ️ **About** - Credits and how-to guide  
+    📋 **Playbook** - Get recommendations based on match context.
     """)
     
     # Display current project structure for reference
@@ -61,7 +57,7 @@ def main():
         st.code("""
 fm24playbook/
 ├─ app.py                    # Main entry point
-├─ pages/                    # Streamlit pages
+├─ pages/                    # Streamlit pages (1_Playbook only)
 ├─ components/               # UI components
 ├─ domain/                   # Business logic
 ├─ data/                     # JSON data files

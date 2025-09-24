@@ -29,6 +29,27 @@ def _apply_context_to_session(ctx: Context) -> None:
     st.session_state["opponent_goals"] = ctx.opponent_goals if ctx.opponent_goals is not None else 0
     st.session_state["specials"] = ctx.special_situations
     st.session_state["reactions"] = ctx.player_reactions
+    # time and stats
+    initial_minute = ctx.minute if ctx.minute is not None else 0
+    st.session_state["minute_slider"] = initial_minute
+    st.session_state["minute_input"] = initial_minute
+    st.session_state["auto_stage_from_minute"] = False
+    st.session_state["use_live_stats"] = bool(
+        ctx.possession_pct is not None
+        or ctx.shots_for is not None
+        or ctx.shots_against is not None
+        or ctx.shots_on_target_for is not None
+        or ctx.shots_on_target_against is not None
+        or ctx.xg_for is not None
+        or ctx.xg_against is not None
+    )
+    st.session_state["possession_pct"] = ctx.possession_pct or 0
+    st.session_state["shots_for"] = ctx.shots_for or 0
+    st.session_state["shots_against"] = ctx.shots_against or 0
+    st.session_state["shots_on_target_for"] = ctx.shots_on_target_for or 0
+    st.session_state["shots_on_target_against"] = ctx.shots_on_target_against or 0
+    st.session_state["xg_for"] = ctx.xg_for or 0.0
+    st.session_state["xg_against"] = ctx.xg_against or 0.0
     st.session_state["use_positions"] = bool(ctx.team_position is not None or ctx.opponent_position is not None)
     st.session_state["team_position"] = ctx.team_position if ctx.team_position is not None else 1
     st.session_state["opponent_position"] = ctx.opponent_position if ctx.opponent_position is not None else 1
@@ -50,13 +71,82 @@ def sidebar_context(default: Context | None = None) -> Context:
 
     st.sidebar.header("Match Context")
 
-    stage = st.sidebar.selectbox(
-        "Stage",
-        options=[e for e in MatchStage],
-        format_func=lambda x: x.value,
-        index=list(MatchStage).index(default.stage) if default else 0,
-        key="stage",
-    )
+    # Minute slider controls stage (optional)
+    st.sidebar.subheader("Time")
+    c_time1, c_time2, c_time3 = st.sidebar.columns([2, 1, 1])
+    with c_time1:
+        minute_slider = st.slider(
+            "Minute",
+            min_value=0,
+            max_value=120,
+            value=(default.minute if default and isinstance(default.minute, int) else 0),
+            step=1,
+            key="minute_slider",
+        )
+    with c_time2:
+        minute_input = st.number_input(
+            "Type minute",
+            min_value=0,
+            max_value=120,
+            step=1,
+            value=(default.minute if default and isinstance(default.minute, int) else 0),
+            key="minute_input",
+        )
+    with c_time3:
+        auto_stage_from_minute = st.checkbox("Auto stage", value=True, help="Derive the match stage from the minute slider.", key="auto_stage_from_minute")
+
+    def stage_from_minute(m: int) -> MatchStage:
+        # Pre-match exactly at 0
+        if m == 0:
+            return MatchStage.PRE_MATCH
+        # 1-24
+        if m < 25:
+            return MatchStage.EARLY
+        # 25-44
+        if m < 45:
+            return MatchStage.MID
+        # 45
+        if m == 45:
+            return MatchStage.HALF_TIME
+        # 46-64
+        if m < 65:
+            return MatchStage.MID
+        # 65-84
+        if m < 85:
+            return MatchStage.LATE
+        # 85-89
+        if m < 90:
+            return MatchStage.VERY_LATE
+        # 90
+        if m == 90:
+            return MatchStage.FULL_TIME
+        # 91-104
+        if m < 105:
+            return MatchStage.ET_FIRST_HALF
+        # 105
+        if m == 105:
+            return MatchStage.ET_HALF_TIME
+        # 106-119
+        if m < 120:
+            return MatchStage.ET_SECOND_HALF
+        # 120
+        return MatchStage.FULL_TIME
+
+    # Resolve minute from inputs (typed value takes precedence)
+    minute = int(minute_input) if isinstance(minute_input, int) else int(minute_slider)
+
+    # Stage selection with optional auto mapping
+    if auto_stage_from_minute:
+        stage = stage_from_minute(minute)
+        st.sidebar.caption(f"Auto stage: {stage.value}")
+    else:
+        stage = st.sidebar.selectbox(
+            "Stage",
+            options=[e for e in MatchStage],
+            format_func=lambda x: x.value,
+            index=list(MatchStage).index(default.stage) if default else 0,
+            key="stage",
+        )
 
     auto_status = st.sidebar.checkbox(
         "Auto-detect Favourite/Underdog",
@@ -125,6 +215,25 @@ def sidebar_context(default: Context | None = None) -> Context:
                 value=default.opponent_goals if (default and default.opponent_goals is not None) else 0,
                 key="opponent_goals",
             )
+
+    # Optional live match stats
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Live Stats (Optional)")
+    use_live_stats = st.sidebar.checkbox("Add possession/shots/xG", value=False, key="use_live_stats")
+    possession_pct = None
+    shots_for = shots_against = shots_on_target_for = shots_on_target_against = None
+    xg_for = xg_against = None
+    if use_live_stats:
+        c_s1, c_s2 = st.sidebar.columns(2)
+        with c_s1:
+            possession_pct = st.number_input("Possession %", min_value=0, max_value=100, value=int(default.possession_pct) if (default and isinstance(default.possession_pct, (int, float))) else 50, step=1, key="possession_pct")
+            shots_for = st.number_input("Shots For", min_value=0, max_value=50, value=default.shots_for or 0, step=1, key="shots_for")
+            shots_on_target_for = st.number_input("On Target For", min_value=0, max_value=50, value=default.shots_on_target_for or 0, step=1, key="shots_on_target_for")
+            xg_for = st.number_input("xG For", min_value=0.0, max_value=10.0, value=float(default.xg_for or 0.0), step=0.05, key="xg_for")
+        with c_s2:
+            shots_against = st.number_input("Shots Against", min_value=0, max_value=50, value=default.shots_against or 0, step=1, key="shots_against")
+            shots_on_target_against = st.number_input("On Target Against", min_value=0, max_value=50, value=default.shots_on_target_against or 0, step=1, key="shots_on_target_against")
+            xg_against = st.number_input("xG Against", min_value=0.0, max_value=10.0, value=float(default.xg_against or 0.0), step=0.05, key="xg_against")
 
     specials: List[SpecialSituation] = st.sidebar.multiselect(
         "Special Situations",
@@ -210,6 +319,7 @@ def sidebar_context(default: Context | None = None) -> Context:
         fav_status=fav,
         venue=venue,
         score_state=score_state,
+        minute=minute,
         special_situations=specials,
         player_reactions=reactions,
         team_position=team_position,
@@ -220,6 +330,13 @@ def sidebar_context(default: Context | None = None) -> Context:
         opponent_goals=opponent_goals,
         auto_fav_status=auto_status,
         preferred_talk_audience=preferred_talk_audience,
+        possession_pct=possession_pct,
+        shots_for=shots_for,
+        shots_against=shots_against,
+        shots_on_target_for=shots_on_target_for,
+        shots_on_target_against=shots_on_target_against,
+        xg_for=xg_for,
+        xg_against=xg_against,
     )
     # Show derived status hint when auto is enabled
     if auto_status:

@@ -65,6 +65,19 @@ _GESTURE_TONE = {
 # Gesture-specific templates for scenarios where FM limits lines by gesture.
 # Only populate where we know the sets; otherwise fall back to tone-based.
 _GESTURE_TEMPLATES: Dict[Tuple[MatchStage, Optional[ScoreState]], Dict[str, List[str]]] = {
+    # Pre-Match (gesture-limited lines exist in FM; especially OA for underdogs)
+    (MatchStage.PRE_MATCH, None): {
+        "Outstretched Arms": [
+            "Nobody expects anything from us today — go out there and enjoy it.",
+            "We're the underdogs here — show everyone what we're capable of.",
+            "No pressure — play your football and have fun out there.",
+            "Good luck out there — we’ll need it, so give the fans a performance to cheer for.",
+        ],
+        "Hands Together": [
+            "No pressure here — relax and play your natural game.",
+            "Stay calm and trust your shape — the performance will come.",
+        ],
+    },
     # Half-Time, losing
     (MatchStage.HALF_TIME, ScoreState.LOSING): {
         # Outstretched Arms: supportive/praise/faith (no hard admonishments)
@@ -106,6 +119,34 @@ _GESTURE_TEMPLATES: Dict[Tuple[MatchStage, Optional[ScoreState]], Dict[str, List
             "Unacceptable — show me a response.",
         ],
     }
+}
+
+# Tone-aware overlays for stats-driven phrasing at talk stages
+_STATS_OVERLAY_TEMPLATES: Dict[str, Dict[str, str]] = {
+    # When on top but not ahead (out-shooting or big xG delta)
+    "push_on": {
+        "calm": "We're on top — keep going and the goal will come.",
+        "assertive": "We've had the chances — be sharper and make it count.",
+        "motivational": "This is there for you — keep pushing and believe.",
+        "relaxed": "Stay composed — our moment will come.",
+        "angry": "We should be ahead — raise the standard in the box.",
+    },
+    # When under pressure while ahead late
+    "see_it_out": {
+        "calm": "Stay switched on and manage the game.",
+        "assertive": "Concentrate — see it out.",
+        "motivational": "Dig in together — finish the job.",
+        "relaxed": "Keep it tidy and close it out.",
+        "angry": "Cut out the chances we're gifting them.",
+    },
+    # When low possession as favourites and not winning
+    "take_control": {
+        "calm": "Keep it simple, secure possession, and build.",
+        "assertive": "Be braver in possession — take control.",
+        "motivational": "Show for the ball and impose yourselves.",
+        "relaxed": "Settle down and keep the ball.",
+        "angry": "Stop forcing it — take care of the ball.",
+    },
 }
 
 # Talk templates chosen by stage/score and tone to ensure valid FM combos
@@ -347,6 +388,64 @@ def harmonize_talk_with_gesture(context: Context, rec: Recommendation) -> Recomm
     return rec
 
 
+def adapt_talk_phrase_with_stats(context: Context, rec: Recommendation) -> Recommendation:
+    """Rewrite the team talk phrase itself based on live stats in a tone-aware way.
+
+    Applies only at talk stages (PreMatch/HalfTime/FullTime) and only when stats are present.
+    Priority:
+      1) Out-shooting/xG advantage but drawing/losing → push_on
+      2) Being out-shot and protecting a lead late → see_it_out
+      3) Low possession (<40) as favourites and not winning → take_control
+    Avoid overriding explicit Promotion overrides at FullTime.
+    """
+    if context.stage not in (MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME):
+        return rec
+    # Respect Promotion celebration at FT
+    if context.stage == MatchStage.FULL_TIME and SpecialSituation.PROMOTION in context.special_situations:
+        return rec
+    # Require at least one stat present
+    has_stats = any([
+        context.possession_pct is not None,
+        context.shots_for is not None, context.shots_against is not None,
+        context.shots_on_target_for is not None, context.shots_on_target_against is not None,
+        context.xg_for is not None, context.xg_against is not None,
+    ])
+    if not has_stats:
+        return rec
+    tone = _gesture_tone(rec.gesture)
+    sf = context.shots_for or 0
+    sa = context.shots_against or 0
+    sof = context.shots_on_target_for or 0
+    soa = context.shots_on_target_against or 0
+    poss = context.possession_pct if context.possession_pct is not None else None
+    xg_for = context.xg_for or 0.0
+    xg_against = context.xg_against or 0.0
+    xg_delta = xg_for - xg_against
+
+    # Determine overlay key by priority
+    overlay_key: Optional[str] = None
+    if context.score_state in (ScoreState.DRAWING, ScoreState.LOSING) and (
+        sf > sa + 3 or sof > soa + 1 or xg_delta > 0.6
+    ):
+        overlay_key = "push_on"
+    elif context.score_state == ScoreState.WINNING and context.stage in (MatchStage.LATE, MatchStage.VERY_LATE) and (
+        sa > sf + 4 or soa > sof + 2
+    ):
+        overlay_key = "see_it_out"
+    elif poss is not None and poss < 40 and context.fav_status == FavStatus.FAVOURITE and context.score_state in (ScoreState.DRAWING, ScoreState.LOSING):
+        overlay_key = "take_control"
+
+    if not overlay_key:
+        return rec
+    # Pick tone-specific phrase; fallback to calm if tone not present
+    tbl = _STATS_OVERLAY_TEMPLATES.get(overlay_key, {})
+    new_phrase = tbl.get(tone) or tbl.get("calm")
+    if not new_phrase:
+        return rec
+    # Replace the phrase with the overlay version
+    return replace(rec, team_talk=new_phrase)
+
+
 def _is_praise_context(context: Context) -> bool:
     """Rough heuristic for when praise-style calm talk is appropriate.
 
@@ -393,7 +492,8 @@ def adjust_gesture_for_context(context: Context, rec: Recommendation) -> Recomme
     g = rec.gesture
     # PreMatch
     if context.stage == MatchStage.PRE_MATCH:
-        g = "Point Finger" if context.fav_status == FavStatus.FAVOURITE else "Hands Together"
+        # Favourites: assertive setup; Underdogs: OA is valid pre-match for removing pressure
+        g = "Point Finger" if context.fav_status == FavStatus.FAVOURITE else "Outstretched Arms"
 
     # HalfTime
     elif context.stage == MatchStage.HALF_TIME:
@@ -534,6 +634,55 @@ def apply_time_score_heuristics(context: Context, rec: Recommendation) -> Recomm
         result.notes.append("Late-game push based on scoreline and status.")
     else:
         result.notes.append("Late-game control: tighten up with a narrow lead.")
+    return result
+
+
+def apply_live_stats_heuristics(context: Context, rec: Recommendation) -> Recommendation:
+    """Use optional live stats to add notes and make subtle tweaks.
+
+    Principles:
+    - If out-shooting but behind/drawing: encourage/motivate to keep belief (notes only unless shout is NONE)
+    - If being out-shot heavily and winning late: suggest Focus (if shout is NONE)
+    - If possession is <40% and favourite while drawing/losing: add note to calm and simplify (no tone change)
+    - If xG delta > 0.6 in your favour but score not reflecting, add 'keep going' note.
+    No changes are applied when stats are not present, keeping tests stable.
+    """
+    if (
+        context.possession_pct is None
+        and context.shots_for is None and context.shots_against is None
+        and context.shots_on_target_for is None and context.shots_on_target_against is None
+        and context.xg_for is None and context.xg_against is None
+    ):
+        return rec
+    result = replace(rec)
+    sf = context.shots_for or 0
+    sa = context.shots_against or 0
+    sof = context.shots_on_target_for or 0
+    soa = context.shots_on_target_against or 0
+    poss = context.possession_pct if context.possession_pct is not None else None
+    xg_for = context.xg_for or 0.0
+    xg_against = context.xg_against or 0.0
+
+    # Out-shooting but not leading
+    if (sf > sa + 3 or sof > soa + 1) and context.score_state in (ScoreState.DRAWING, ScoreState.LOSING):
+        result.notes.append("We're creating more — keep belief and maintain intensity.")
+        if result.shout == Shout.NONE and context.stage not in (MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME):
+            result.shout = Shout.ENCOURAGE
+
+    # Being out-shot and protecting a lead late
+    if context.score_state == ScoreState.WINNING and (sa > sf + 4 or soa > sof + 2) and context.stage in (MatchStage.LATE, MatchStage.VERY_LATE):
+        result.notes.append("They're peppering us — tighten up and concentrate.")
+        if result.shout == Shout.NONE:
+            result.shout = Shout.FOCUS
+
+    # Low possession while favourite and not winning
+    if poss is not None and poss < 40 and context.fav_status == FavStatus.FAVOURITE and context.score_state in (ScoreState.DRAWING, ScoreState.LOSING):
+        result.notes.append("Possession low for a favourite — consider calming it down and keeping it simple.")
+
+    # Big xG delta in our favour but not leading
+    if (xg_for - xg_against) > 0.6 and context.score_state in (ScoreState.DRAWING, ScoreState.LOSING):
+        result.notes.append("xG says we're on top — keep pushing, the goal should come.")
+
     return result
 
 
@@ -793,10 +942,13 @@ def recommend(context: Context, playbook: PlaybookData) -> Optional[Recommendati
     # In-play shout selection if none set yet
     with_shout = choose_inplay_shout(context, with_stats)
     with_time = apply_time_score_heuristics(context, with_shout)
-    final = apply_reaction_adjustments(context, with_time, playbook.reactions)
+    with_stats_live = apply_live_stats_heuristics(context, with_time)
+    final = apply_reaction_adjustments(context, with_stats_live, playbook.reactions)
     # Post-adjust gesture to avoid praise-coded OA when behind and pick assertive for favourites
     final = adjust_gesture_for_context(context, final)
     final = harmonize_talk_with_gesture(context, final)
+    # Tone-aware stats overlays for the phrase itself
+    final = adapt_talk_phrase_with_stats(context, final)
     final = enforce_prematch_mentality_cap(context, final)
     # If user selected a preferred talk audience at talk stages, override
     if context.stage in (MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME) and context.preferred_talk_audience:
