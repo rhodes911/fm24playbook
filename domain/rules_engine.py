@@ -135,34 +135,17 @@ def _get_tone_statements(stage: MatchStage, score_state: Optional[ScoreState], t
     return all_statements
 
 def _get_stats_overlay_phrase(overlay_key: str, tone: str) -> Optional[str]:
-    """Get stats-based overlay phrase - REPLACES _STATS_OVERLAY_TEMPLATES."""
-    # Stats overlays (could be moved to JSON later if needed)
-    stats_overlays = {
-        "push_on": {
-            "calm": "We're on top â€” keep going and the goal will come.",
-            "assertive": "We've had the chances â€” be sharper and make it count.",
-            "motivational": "This is there for you â€” keep pushing and believe.",
-            "relaxed": "Stay composed â€” our moment will come.",
-            "angry": "We should be ahead â€” raise the standard in the box.",
-        },
-        "see_it_out": {
-            "calm": "Stay switched on and manage the game.",
-            "assertive": "Concentrate â€” see it out.",
-            "motivational": "Dig in together â€” finish the job.",
-            "relaxed": "Keep it tidy and close it out.",
-            "angry": "Cut out the chances we're gifting them.",
-        },
-        "take_control": {
-            "calm": "Keep it simple, secure possession, and build.",
-            "assertive": "Be braver in possession â€” take control.",
-            "motivational": "Show for the ball and impose yourselves.",
-            "relaxed": "Settle down and keep the ball.",
-            "angry": "Stop forcing it â€” take care of the ball.",
-        },
-    }
+    """Get stats-based overlay phrase from JSON statements - NO MORE HARDCODED OVERLAYS."""
+    # Use JSON-driven statements instead of hardcoded overlays
+    # Get tone-based statements which are already authentic FM24 phrases
+    statements = _get_tone_statements(MatchStage.HALF_TIME, ScoreState.DRAWING, tone)
+    if statements:
+        # Return first available statement for the tone
+        return statements[0]
     
-    overlay_phrases = stats_overlays.get(overlay_key, {})
-    return overlay_phrases.get(tone) or overlay_phrases.get("calm")
+    # Fallback to calm tone if specific tone not available
+    calm_statements = _get_tone_statements(MatchStage.HALF_TIME, ScoreState.DRAWING, "calm")
+    return calm_statements[0] if calm_statements else None
 
 
 # REMOVED: _GESTURE_TONE - now using _gesture_tone() function with JSON data
