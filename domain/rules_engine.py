@@ -13,6 +13,7 @@ from .models import (
     Context, Recommendation,
     Mentality, Shout,
     MatchStage, FavStatus, Venue, ScoreState, SpecialSituation, TalkAudience,
+    FavTier,
     PlayerReaction,
     PlaybookRule, ReactionRule, SpecialRule
 )
@@ -617,44 +618,195 @@ def apply_live_stats_heuristics(context: Context, rec: Recommendation) -> Recomm
 
 
 def detect_fav_status(context: Context) -> Tuple[FavStatus, str]:
-    """Heuristic to infer Favourite/Underdog with a short explanation string.
+    """Infer Favourite/Underdog using config-driven weights and thresholds.
 
-    Scoring: position (Â±1 if gap >=3), form (Â±1 if diff >=2), home (+1 if home).
+    Config file: data/rules/normalized/engine_config.json
+    Structure:
+      {
+        "favourite_detection": {
+          "pos_gap_threshold": int,
+          "pos_weight": int,
+          "form_diff_threshold": int,
+          "form_weight": int,
+          "home_bonus": int,
+          "away_penalty": int,
+          "favourite_threshold": int,
+          "special_rules": {
+            "require_both_pos_and_form_to_be_favourite_away": bool,
+            "never_favourite_away_if_pos_gap_disadvantage_ge": int
+          }
+        }
+      }
     """
+    # Load config once per call (file IO is fine here; could be cached later)
+    try:
+        cfg_fp = Path(__file__).resolve().parent.parent / "data" / "rules" / "normalized" / "engine_config.json"
+        cfg = json.loads(cfg_fp.read_text(encoding="utf-8")) if cfg_fp.exists() else {}
+        fav_cfg = cfg.get("favourite_detection", {})
+    except Exception:
+        fav_cfg = {}
+
+    pos_gap_threshold = int(fav_cfg.get("pos_gap_threshold", 3))
+    pos_weight = int(fav_cfg.get("pos_weight", 1))
+    form_diff_threshold = int(fav_cfg.get("form_diff_threshold", 2))
+    form_weight = int(fav_cfg.get("form_weight", 1))
+    home_bonus = int(fav_cfg.get("home_bonus", 1))
+    away_penalty = int(fav_cfg.get("away_penalty", 0))
+    favourite_threshold = int(fav_cfg.get("favourite_threshold", 2))
+    specials = fav_cfg.get("special_rules", {}) or {}
+    require_both_away = bool(specials.get("require_both_pos_and_form_to_be_favourite_away", False))
+    never_fav_away_if_pos_gap_disadv_ge = int(specials.get("never_favourite_away_if_pos_gap_disadvantage_ge", 0))
+
     score = 0
     parts: List[str] = []
+
+    # Position component: positive if team significantly above opponent
     if context.team_position is not None and context.opponent_position is not None:
         pos_delta = context.opponent_position - context.team_position
-        if pos_delta >= 3:
-            score += 1
-            parts.append("pos +1")
-        elif pos_delta <= -3:
-            score -= 1
-            parts.append("pos -1")
+        if pos_delta >= pos_gap_threshold:
+            score += pos_weight
+            parts.append(f"pos +{pos_weight}")
+        elif pos_delta <= -pos_gap_threshold:
+            score -= pos_weight
+            parts.append(f"pos -{pos_weight}")
         else:
             parts.append("pos 0")
     else:
         parts.append("pos ?")
 
+    # Form component
     form_delta = _score_form(context.team_form) - _score_form(context.opponent_form)
-    if form_delta >= 2:
-        score += 1
-        parts.append("form +1")
-    elif form_delta <= -2:
-        score -= 1
-        parts.append("form -1")
+    if form_delta >= form_diff_threshold:
+        score += form_weight
+        parts.append(f"form +{form_weight}")
+    elif form_delta <= -form_diff_threshold:
+        score -= form_weight
+        parts.append(f"form -{form_weight}")
     else:
         parts.append("form 0")
 
+    # Venue component
     if context.venue == Venue.HOME:
-        score += 1
-        parts.append("home +1")
+        score += home_bonus
+        parts.append(f"home +{home_bonus}")
     else:
-        parts.append("away 0")
+        score -= away_penalty
+        parts.append(f"away -{away_penalty}")
 
-    fav = FavStatus.FAVOURITE if score >= 1 else FavStatus.UNDERDOG
+    # Special away constraints
+    if context.venue == Venue.AWAY and context.team_position is not None and context.opponent_position is not None:
+        pos_delta = context.opponent_position - context.team_position
+        # If we're worse by N+ positions away, never favourite
+        if never_fav_away_if_pos_gap_disadv_ge and (-pos_delta) >= never_fav_away_if_pos_gap_disadv_ge:
+            fav = FavStatus.UNDERDOG
+            explanation = f"{fav.value} (forced: away and {abs(pos_delta)} places worse)"
+            return fav, explanation
+        # If require both pos and form advantages to be favourite away
+        if require_both_away:
+            has_pos_adv = pos_delta >= pos_gap_threshold
+            has_form_adv = form_delta >= form_diff_threshold
+            if not (has_pos_adv and has_form_adv):
+                fav = FavStatus.UNDERDOG
+                explanation = f"{fav.value} (away: need both pos and form advantages; got pos={'Y' if has_pos_adv else 'N'}, form={'Y' if has_form_adv else 'N'})"
+                return fav, explanation
+
+    fav = FavStatus.FAVOURITE if score >= favourite_threshold else FavStatus.UNDERDOG
     explanation = f"{fav.value} (score {score}: " + ", ".join(parts) + ")"
     return fav, explanation
+
+
+def detect_matchup_tier(context: Context) -> Tuple[FavTier, float, str]:
+    """Compute a granular advantage score and map to a FavTier.
+
+    Uses advantage_model from engine_config.json combining table context and live stats.
+    Returns (tier, score, explanation).
+    """
+    # Load model config
+    try:
+        cfg_fp = Path(__file__).resolve().parent.parent / "data" / "rules" / "normalized" / "engine_config.json"
+        cfg = json.loads(cfg_fp.read_text(encoding="utf-8")) if cfg_fp.exists() else {}
+        m = cfg.get("advantage_model", {})
+    except Exception:
+        m = {}
+    # Weights
+    w_pos = float(m.get("pos_weight", 1.0))
+    w_form = float(m.get("form_weight", 0.8))
+    w_home = float(m.get("venue_home", 0.6))
+    w_away = float(m.get("venue_away", -0.6))
+    w_xg = float(m.get("xg_weight", 0.8))
+    w_shots = float(m.get("shots_weight", 0.4))
+    w_poss = float(m.get("possession_weight", 0.3))
+    cap = float(m.get("cap", 5.0))
+    tiers = m.get("tiers", {})
+    thr_strong_fav = float(tiers.get("strong_fav", 2.5))
+    thr_slight_fav = float(tiers.get("slight_fav", 0.8))
+    thr_even_hi = float(tiers.get("even_hi", 0.8))
+    thr_even_lo = float(tiers.get("even_lo", -0.8))
+    thr_slight_dog = float(tiers.get("slight_dog", -0.8))
+    thr_strong_dog = float(tiers.get("strong_dog", -2.5))
+
+    parts: List[str] = []
+    score = 0.0
+
+    # Table position differential (positive if we're better placed)
+    if context.team_position is not None and context.opponent_position is not None:
+        pos_delta = context.opponent_position - context.team_position
+        score += w_pos * (pos_delta / 4.0)  # scale: 4 places ≈ 1 point
+        parts.append(f"posΔ {pos_delta}×{w_pos}")
+    # Form differential: W=3, D=1, L=0
+    def _form_points(s: Optional[str]) -> int:
+        if not s:
+            return 0
+        pts = 0
+        for c in s[:5].upper():
+            pts += 3 if c == 'W' else (1 if c == 'D' else 0)
+        return pts
+    form_delta = _form_points(context.team_form) - _form_points(context.opponent_form)
+    score += w_form * (form_delta / 5.0)  # scale: 5 pts ≈ 1 point
+    parts.append(f"formΔ {form_delta}×{w_form}")
+
+    # Venue factor
+    if context.venue == Venue.HOME:
+        score += w_home
+        parts.append(f"home +{w_home}")
+    else:
+        score += w_away
+        parts.append(f"away {w_away}")
+
+    # Live stats (if present)
+    if context.xg_for is not None and context.xg_against is not None:
+        xg_delta = (context.xg_for - context.xg_against)
+        score += w_xg * xg_delta
+        parts.append(f"xgΔ {round(xg_delta,2)}×{w_xg}")
+    if context.shots_for is not None and context.shots_against is not None:
+        shots_delta = (context.shots_for - context.shots_against) / 5.0
+        score += w_shots * shots_delta
+        parts.append(f"shotsΔ {context.shots_for - context.shots_against}×{w_shots}/5")
+    if context.possession_pct is not None:
+        poss_delta = (context.possession_pct - 50.0) / 20.0
+        score += w_poss * poss_delta
+        parts.append(f"possΔ {int(context.possession_pct)-50}%×{w_poss}/20")
+
+    # Clamp
+    score = max(-cap, min(cap, score))
+
+    # Map to tier
+    if score >= thr_strong_fav:
+        tier = FavTier.STRONG_FAVOURITE
+    elif score >= thr_slight_fav:
+        tier = FavTier.SLIGHT_FAVOURITE
+    elif thr_even_lo < score < thr_even_hi:
+        tier = FavTier.EVEN
+    elif score <= thr_strong_dog:
+        tier = FavTier.STRONG_UNDERDOG
+    elif score <= thr_slight_dog:
+        tier = FavTier.SLIGHT_UNDERDOG
+    else:
+        # Between even_lo and even_hi inclusive
+        tier = FavTier.EVEN
+
+    explanation = f"{tier.value} (score {round(score,2)}: " + ", ".join(parts) + ")"
+    return tier, score, explanation
 
 
 def pick_base_rule(context: Context, rules: List[PlaybookRule]) -> Optional[Recommendation]:

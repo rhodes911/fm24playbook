@@ -117,7 +117,7 @@ def _get_base_ctx(active_session: Dict[str, Any] | None) -> Context:
             pref_aud = TalkAudience(ctxd.get("preferred_talk_audience"))
         except Exception:
             pref_aud = None
-    return Context(
+    base = Context(
         stage=MatchStage.PRE_MATCH,
         fav_status=fav,
         venue=ven,
@@ -130,6 +130,14 @@ def _get_base_ctx(active_session: Dict[str, Any] | None) -> Context:
         preferred_talk_audience=pref_aud,
         auto_fav_status=bool(ctxd.get("auto_fav_status", False)),
     )
+    # If auto-detect is enabled for the active session, derive favourite now
+    if base.auto_fav_status:
+        try:
+            det, _ = detect_fav_status(base)
+            base.fav_status = det
+        except Exception:
+            pass
+    return base
 
 tabs = st.tabs(["Pre-Match", "First Half", "Half-Time", "Second Half", "Full-Time", "Timeline"])
 
@@ -146,10 +154,13 @@ with tabs[0]:
         venue_idx = venue_options.index(venue_val) if venue_val in venue_options else 0
         venue_sel = st.selectbox("Venue", options=venue_options, index=venue_idx)
     with col3:
+        # Determine current auto-detect checkbox state (from session or saved context) to drive disabled state
+        _ctxd_preview = (active or {}).get("context", {})
+        auto_checked_state = bool(st.session_state.get("pm_auto_fav", _ctxd_preview.get("auto_fav_status", False)))
         fav_options = [FavStatus.FAVOURITE.value, FavStatus.UNDERDOG.value]
         fav_val = (active and active.get("context", {}).get("fav_status")) or FavStatus.FAVOURITE.value
         fav_idx = fav_options.index(fav_val) if fav_val in fav_options else 0
-        fav_sel = st.selectbox("Status", options=fav_options, index=fav_idx)
+        fav_sel = st.selectbox("Status", options=fav_options, index=fav_idx, disabled=auto_checked_state)
 
     # Additional Pre-Match meta
     ctxd = (active or {}).get("context", {})
@@ -201,7 +212,8 @@ with tabs[0]:
     start_col, resume_col, _sp = st.columns([1, 1, 2])
     with start_col:
         if st.button("Start New Session", type="primary", disabled=bool(active) or not opponent.strip()):
-            ctx = Context(
+            # Build a preliminary context to optionally derive favourite
+            prelim_ctx = Context(
                 stage=MatchStage.PRE_MATCH,
                 fav_status=FavStatus.FAVOURITE if fav_sel == FavStatus.FAVOURITE.value else FavStatus.UNDERDOG,
                 venue=Venue(venue_sel),
@@ -214,7 +226,14 @@ with tabs[0]:
                 preferred_talk_audience=None if audience_sel == "(auto)" else TalkAudience(audience_sel),
                 auto_fav_status=bool(auto_fav),
             )
-            st.session_state["_session"] = sm.start(ctx, name=opponent.strip())
+            # If auto-detect is enabled, ignore manual fav selection and use detected value
+            if prelim_ctx.auto_fav_status:
+                try:
+                    _det_fav, _ = detect_fav_status(prelim_ctx)
+                    prelim_ctx.fav_status = _det_fav
+                except Exception:
+                    pass
+            st.session_state["_session"] = sm.start(prelim_ctx, name=opponent.strip())
             st.rerun()
     with resume_col:
         if active and st.button("Resume Active Session"):
@@ -245,9 +264,13 @@ with tabs[0]:
 
     # Derive favourite if requested
     derived_text = ""
+    derived_status = None
     if tmp_ctx.auto_fav_status:
         try:
             derived, expl = detect_fav_status(tmp_ctx)
+            # Override favourite in preview context
+            tmp_ctx.fav_status = derived
+            derived_status = derived
             derived_text = f"<span class='chip badge'>Detected: {derived.value}</span> <span class='muted'>• {expl}</span>"
         except Exception:
             pass
@@ -293,12 +316,12 @@ with tabs[0]:
             sm.update_context(tmp_ctx)
             st.success("Pre-Match context saved.")
             st.rerun()
-    st.markdown(
+        st.markdown(
         f"""
         <div class='pm-card'>
           <div class='pm-row'>
             <div class='pm-title'>vs <strong>{opponent or '—'}</strong> • {venue_sel}</div>
-            <span class='chip badge'>Status: {fav_sel}{' (auto)' if auto_fav else ''}</span>
+                        <span class='chip badge'>Status: {(derived_status.value if (auto_fav and derived_status) else fav_sel)}{' (auto)' if auto_fav else ''}</span>
             {adv_html}
             {aud_html}
           </div>
@@ -333,6 +356,11 @@ with tabs[0]:
                 st.write(f"Gesture: {pre_rec.gesture} • Shout: {pre_rec.shout.value if isinstance(pre_rec.shout, Shout) else pre_rec.shout}")
                 if pre_rec.team_talk:
                     st.write(f"Talk: {pre_rec.team_talk}")
+                # Rationale
+                if getattr(pre_rec, "notes", None):
+                    with st.expander("Why this"):
+                        for n in pre_rec.notes[:6]:
+                            st.write(f"- {n}")
                 if st.button("Lock Pre-Match", key="lock_pm"):
                     # Persist the current inputs into the active session's context
                     sm.update_context(base_ctx)
@@ -356,32 +384,50 @@ with tabs[1]:
         st.info("Start a session in Pre-Match first.")
     else:
         st.subheader("Add Snapshot (First Half)")
+        # Prefill defaults from the latest FH snapshot (<=45') if available
+        events = (sm.get_active() or {}).get("events", [])
+        last_fh = best_snapshot_for(events, lambda e: int(e.get("minute", 0)) <= 45)
+        last_any = best_snapshot_for(events, lambda e: True)
+        # Prefer last FH snapshot, otherwise fallback to last any snapshot if it's still in first half
+        fallback_first_half = last_any if (last_any and int(last_any.get("minute", 0)) <= 45) else None
+        last_fh_p = (last_fh or fallback_first_half or {}).get("payload", {})
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            minute = st.number_input("Minute", min_value=0, max_value=45, value=10, step=1, key="fh_min")
+            # If we have a previous FH minute, suggest +5 up to 45
+            suggested_min_fh = 10
+            try:
+                if last_fh_p:
+                    prev_min = int(last_fh_p.get("minute", 10))
+                    # Only use previous minute if it was first half; else keep default 10
+                    if prev_min <= 45:
+                        suggested_min_fh = min(45, prev_min + 5)
+            except Exception:
+                pass
+            minute = st.number_input("Minute", min_value=0, max_value=45, value=int(suggested_min_fh), step=1, key="fh_min")
         with c2:
-            team_goals = st.number_input("Goals For", min_value=0, max_value=20, value=0, step=1, key="fh_gf")
+            team_goals = st.number_input("Goals For", min_value=0, max_value=20, value=int(last_fh_p.get("score_for", 0) or 0), step=1, key="fh_gf")
         with c3:
-            opp_goals = st.number_input("Goals Against", min_value=0, max_value=20, value=0, step=1, key="fh_ga")
+            opp_goals = st.number_input("Goals Against", min_value=0, max_value=20, value=int(last_fh_p.get("score_against", 0) or 0), step=1, key="fh_ga")
         with c4:
-            possession = st.number_input("Possession %", min_value=0, max_value=100, value=50, step=1, key="fh_poss")
+            possession = st.number_input("Possession %", min_value=0, max_value=100, value=int(last_fh_p.get("possession_pct", 50) or 50), step=1, key="fh_poss")
 
         c5, c6, c7, c8 = st.columns(4)
         with c5:
-            shots_for = st.number_input("Shots For", min_value=0, max_value=50, value=0, step=1, key="fh_sf")
+            shots_for = st.number_input("Shots For", min_value=0, max_value=50, value=int(last_fh_p.get("shots_for", 0) or 0), step=1, key="fh_sf")
         with c6:
-            shots_against = st.number_input("Shots Against", min_value=0, max_value=50, value=0, step=1, key="fh_sa")
+            shots_against = st.number_input("Shots Against", min_value=0, max_value=50, value=int(last_fh_p.get("shots_against", 0) or 0), step=1, key="fh_sa")
         with c7:
-            sot_for = st.number_input("On Target For", min_value=0, max_value=50, value=0, step=1, key="fh_sof")
+            sot_for = st.number_input("On Target For", min_value=0, max_value=50, value=int(last_fh_p.get("shots_on_target_for", 0) or 0), step=1, key="fh_sof")
         with c8:
-            sot_against = st.number_input("On Target Against", min_value=0, max_value=50, value=0, step=1, key="fh_soa")
+            sot_against = st.number_input("On Target Against", min_value=0, max_value=50, value=int(last_fh_p.get("shots_on_target_against", 0) or 0), step=1, key="fh_soa")
 
         c9, c10 = st.columns(2)
         with c9:
-            xg_for = st.number_input("xG For", min_value=0.0, max_value=15.0, value=0.0, step=0.05, format="%.2f", key="fh_xgf")
+            xg_for = st.number_input("xG For", min_value=0.0, max_value=15.0, value=float(last_fh_p.get("xg_for", 0.0) or 0.0), step=0.05, format="%.2f", key="fh_xgf")
         with c10:
-            xg_against = st.number_input("xG Against", min_value=0.0, max_value=15.0, value=0.0, step=0.05, format="%.2f", key="fh_xga")
+            xg_against = st.number_input("xG Against", min_value=0.0, max_value=15.0, value=float(last_fh_p.get("xg_against", 0.0) or 0.0), step=0.05, format="%.2f", key="fh_xga")
 
+        snap_note_fh = st.text_input("Snapshot note (optional)", key="fh_note")
         if st.button("Add Snapshot (FH)"):
             score_state = ScoreState.WINNING.value if team_goals > opp_goals else (ScoreState.LOSING.value if team_goals < opp_goals else ScoreState.DRAWING.value)
             sm.append_event({
@@ -399,6 +445,7 @@ with tabs[1]:
                     "shots_on_target_against": int(sot_against),
                     "xg_for": float(xg_for),
                     "xg_against": float(xg_against),
+                    "note": snap_note_fh.strip() if snap_note_fh and snap_note_fh.strip() else None,
                 }
             })
             st.success(f"Snapshot added for {minute}' (FH)")
@@ -420,6 +467,11 @@ with tabs[1]:
             rec = recommend(live_ctx)
             if rec:
                 st.write(f"Suggested shout: {rec.shout.value if isinstance(rec.shout, Shout) else rec.shout}")
+                # Rationale
+                if getattr(rec, "notes", None):
+                    with st.expander("Why this"):
+                        for n in rec.notes[:6]:
+                            st.write(f"- {n}")
                 if st.button("Add Shout (FH)"):
                     sm.append_event({
                         "type": "shout",
@@ -443,6 +495,62 @@ with tabs[2]:
             ht_snap = best_snapshot_for(events, lambda e: int(e.get("minute", 0)) <= 45)
             if not ht_snap:
                 st.info("Add a snapshot at or before 45' to generate HT talk.")
+                # Half-Time Snapshot form (minute fixed at 45), prefilled from latest FH snapshot
+                last_fh = best_snapshot_for(events, lambda e: int(e.get("minute", 0)) <= 45)
+                last_fh_p = (last_fh or {}).get("payload", {})
+                c1, c2, c3, c4 = st.columns(4)
+                with c1:
+                    ht_min = st.number_input("Minute", min_value=45, max_value=45, value=45, step=1, key="ht_min", disabled=True)
+                with c2:
+                    ht_gf = st.number_input("Goals For", min_value=0, max_value=20, value=int(last_fh_p.get("score_for", 0) or 0), step=1, key="ht_gf")
+                with c3:
+                    ht_ga = st.number_input("Goals Against", min_value=0, max_value=20, value=int(last_fh_p.get("score_against", 0) or 0), step=1, key="ht_ga")
+                with c4:
+                    ht_poss = st.number_input("Possession %", min_value=0, max_value=100, value=int(last_fh_p.get("possession_pct", 50) or 50), step=1, key="ht_poss")
+
+                c5, c6, c7, c8 = st.columns(4)
+                with c5:
+                    ht_sf = st.number_input("Shots For", min_value=0, max_value=50, value=int(last_fh_p.get("shots_for", 0) or 0), step=1, key="ht_sf")
+                with c6:
+                    ht_sa = st.number_input("Shots Against", min_value=0, max_value=50, value=int(last_fh_p.get("shots_against", 0) or 0), step=1, key="ht_sa")
+                with c7:
+                    ht_sof = st.number_input("On Target For", min_value=0, max_value=50, value=int(last_fh_p.get("shots_on_target_for", 0) or 0), step=1, key="ht_sof")
+                with c8:
+                    ht_soa = st.number_input("On Target Against", min_value=0, max_value=50, value=int(last_fh_p.get("shots_on_target_against", 0) or 0), step=1, key="ht_soa")
+
+                c9, c10 = st.columns(2)
+                with c9:
+                    ht_xgf = st.number_input("xG For", min_value=0.0, max_value=15.0, value=float(last_fh_p.get("xg_for", 0.0) or 0.0), step=0.05, format="%.2f", key="ht_xgf")
+                with c10:
+                    ht_xga = st.number_input("xG Against", min_value=0.0, max_value=15.0, value=float(last_fh_p.get("xg_against", 0.0) or 0.0), step=0.05, format="%.2f", key="ht_xga")
+
+                snap_note_ht = st.text_input("Snapshot note (optional)", key="ht_note")
+                if st.button("Add Snapshot (HT)", key="add_ht_snap"):
+                    score_state_ht = (
+                        ScoreState.WINNING.value if ht_gf > ht_ga else (
+                            ScoreState.LOSING.value if ht_gf < ht_ga else ScoreState.DRAWING.value
+                        )
+                    )
+                    sm.append_event({
+                        "type": "snapshot",
+                        "minute": 45,
+                        "payload": {
+                            "minute": 45,
+                            "score_for": int(ht_gf),
+                            "score_against": int(ht_ga),
+                            "score_state": score_state_ht,
+                            "possession_pct": float(ht_poss),
+                            "shots_for": int(ht_sf),
+                            "shots_against": int(ht_sa),
+                            "shots_on_target_for": int(ht_sof),
+                            "shots_on_target_against": int(ht_soa),
+                            "xg_for": float(ht_xgf),
+                            "xg_against": float(ht_xga),
+                            "note": snap_note_ht.strip() if snap_note_ht and snap_note_ht.strip() else None,
+                        }
+                    })
+                    st.success("Half-Time snapshot added (45')")
+                    st.rerun()
             else:
                 ht_ctx = context_from_snapshot(base_ctx, ht_snap, MatchStage.HALF_TIME)
                 ht_rec = recommend(ht_ctx)
@@ -450,6 +558,71 @@ with tabs[2]:
                     st.write(f"Gesture: {ht_rec.gesture} • Shout: {ht_rec.shout.value if isinstance(ht_rec.shout, Shout) else ht_rec.shout}")
                     if ht_rec.team_talk:
                         st.write(f"Talk: {ht_rec.team_talk}")
+                    # Rationale
+                    if getattr(ht_rec, "notes", None):
+                        with st.expander("Why this"):
+                            for n in ht_rec.notes[:6]:
+                                st.write(f"- {n}")
+                    # Optional: Edit/Log a Half-Time snapshot even if one exists
+                    with st.expander("Add or Update Half-Time Snapshot (45')", expanded=False):
+                        # Prefill from the existing HT snapshot payload; fallback to latest FH snapshot
+                        default_src = ht_snap
+                        if not default_src:
+                            default_src = best_snapshot_for(events, lambda e: int(e.get("minute", 0)) <= 45)
+                        pdef = (default_src or {}).get("payload", {})
+                        c1, c2, c3, c4 = st.columns(4)
+                        with c1:
+                            st.number_input("Minute", min_value=45, max_value=45, value=45, step=1, key="ht_edit_min", disabled=True)
+                        with c2:
+                            e_gf = st.number_input("Goals For", min_value=0, max_value=20, value=int(pdef.get("score_for", 0) or 0), step=1, key="ht_edit_gf")
+                        with c3:
+                            e_ga = st.number_input("Goals Against", min_value=0, max_value=20, value=int(pdef.get("score_against", 0) or 0), step=1, key="ht_edit_ga")
+                        with c4:
+                            e_poss = st.number_input("Possession %", min_value=0, max_value=100, value=int(pdef.get("possession_pct", 50) or 50), step=1, key="ht_edit_poss")
+
+                        c5, c6, c7, c8 = st.columns(4)
+                        with c5:
+                            e_sf = st.number_input("Shots For", min_value=0, max_value=50, value=int(pdef.get("shots_for", 0) or 0), step=1, key="ht_edit_sf")
+                        with c6:
+                            e_sa = st.number_input("Shots Against", min_value=0, max_value=50, value=int(pdef.get("shots_against", 0) or 0), step=1, key="ht_edit_sa")
+                        with c7:
+                            e_sof = st.number_input("On Target For", min_value=0, max_value=50, value=int(pdef.get("shots_on_target_for", 0) or 0), step=1, key="ht_edit_sof")
+                        with c8:
+                            e_soa = st.number_input("On Target Against", min_value=0, max_value=50, value=int(pdef.get("shots_on_target_against", 0) or 0), step=1, key="ht_edit_soa")
+
+                        c9, c10 = st.columns(2)
+                        with c9:
+                            e_xgf = st.number_input("xG For", min_value=0.0, max_value=15.0, value=float(pdef.get("xg_for", 0.0) or 0.0), step=0.05, format="%.2f", key="ht_edit_xgf")
+                        with c10:
+                            e_xga = st.number_input("xG Against", min_value=0.0, max_value=15.0, value=float(pdef.get("xg_against", 0.0) or 0.0), step=0.05, format="%.2f", key="ht_edit_xga")
+
+                        snap_note_ht2 = st.text_input("Snapshot note (optional)", key="ht_edit_note")
+                        if st.button("Save Half-Time Snapshot (45')", key="save_ht_edit"):
+                            score_state_ht2 = (
+                                ScoreState.WINNING.value if e_gf > e_ga else (
+                                    ScoreState.LOSING.value if e_gf < e_ga else ScoreState.DRAWING.value
+                                )
+                            )
+                            sm.append_event({
+                                "type": "snapshot",
+                                "minute": 45,
+                                "payload": {
+                                    "minute": 45,
+                                    "score_for": int(e_gf),
+                                    "score_against": int(e_ga),
+                                    "score_state": score_state_ht2,
+                                    "possession_pct": float(e_poss),
+                                    "shots_for": int(e_sf),
+                                    "shots_against": int(e_sa),
+                                    "shots_on_target_for": int(e_sof),
+                                    "shots_on_target_against": int(e_soa),
+                                    "xg_for": float(e_xgf),
+                                    "xg_against": float(e_xga),
+                                    "note": snap_note_ht2.strip() if snap_note_ht2 and snap_note_ht2.strip() else None,
+                                }
+                            })
+                            st.success("Half-Time snapshot saved (45')")
+                            st.rerun()
                     if st.button("Lock Half-Time", key="lock_ht"):
                         sm.append_event({
                             "type": "decision",
@@ -471,32 +644,51 @@ with tabs[3]:
         st.info("Start a session in Pre-Match first.")
     else:
         st.subheader("Add Snapshot (Second Half)")
+        # Prefill defaults from the latest SH snapshot (>=46') if available, otherwise last any snapshot
+        events = (sm.get_active() or {}).get("events", [])
+        last_sh = best_snapshot_for(events, lambda e: int(e.get("minute", 0)) >= 46)
+        if last_sh is None:
+            last_sh = best_snapshot_for(events, lambda e: True)
+        last_sh_p = (last_sh or {}).get("payload", {})
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            minute2 = st.number_input("Minute", min_value=46, max_value=120, value=70, step=1, key="sh_min")
+            # If we have a previous SH minute, suggest +5 up to 120
+            suggested_min_sh = 70
+            try:
+                if last_sh_p:
+                    last_min_val = int(last_sh_p.get("minute", 70))
+                    if last_min_val < 46:
+                        # If previous snapshot was first-half, start SH at 46
+                        suggested_min_sh = 46
+                    else:
+                        suggested_min_sh = min(120, last_min_val + 5)
+            except Exception:
+                pass
+            minute2 = st.number_input("Minute", min_value=46, max_value=120, value=int(max(46, suggested_min_sh)), step=1, key="sh_min")
         with c2:
-            team_goals2 = st.number_input("Goals For", min_value=0, max_value=20, value=0, step=1, key="sh_gf")
+            team_goals2 = st.number_input("Goals For", min_value=0, max_value=20, value=int(last_sh_p.get("score_for", 0) or 0), step=1, key="sh_gf")
         with c3:
-            opp_goals2 = st.number_input("Goals Against", min_value=0, max_value=20, value=0, step=1, key="sh_ga")
+            opp_goals2 = st.number_input("Goals Against", min_value=0, max_value=20, value=int(last_sh_p.get("score_against", 0) or 0), step=1, key="sh_ga")
         with c4:
-            possession2 = st.number_input("Possession %", min_value=0, max_value=100, value=50, step=1, key="sh_poss")
+            possession2 = st.number_input("Possession %", min_value=0, max_value=100, value=int(last_sh_p.get("possession_pct", 50) or 50), step=1, key="sh_poss")
 
         c5, c6, c7, c8 = st.columns(4)
         with c5:
-            shots_for2 = st.number_input("Shots For", min_value=0, max_value=50, value=0, step=1, key="sh_sf")
+            shots_for2 = st.number_input("Shots For", min_value=0, max_value=50, value=int(last_sh_p.get("shots_for", 0) or 0), step=1, key="sh_sf")
         with c6:
-            shots_against2 = st.number_input("Shots Against", min_value=0, max_value=50, value=0, step=1, key="sh_sa")
+            shots_against2 = st.number_input("Shots Against", min_value=0, max_value=50, value=int(last_sh_p.get("shots_against", 0) or 0), step=1, key="sh_sa")
         with c7:
-            sot_for2 = st.number_input("On Target For", min_value=0, max_value=50, value=0, step=1, key="sh_sof")
+            sot_for2 = st.number_input("On Target For", min_value=0, max_value=50, value=int(last_sh_p.get("shots_on_target_for", 0) or 0), step=1, key="sh_sof")
         with c8:
-            sot_against2 = st.number_input("On Target Against", min_value=0, max_value=50, value=0, step=1, key="sh_soa")
+            sot_against2 = st.number_input("On Target Against", min_value=0, max_value=50, value=int(last_sh_p.get("shots_on_target_against", 0) or 0), step=1, key="sh_soa")
 
         c9, c10 = st.columns(2)
         with c9:
-            xg_for2 = st.number_input("xG For", min_value=0.0, max_value=15.0, value=0.0, step=0.05, format="%.2f", key="sh_xgf")
+            xg_for2 = st.number_input("xG For", min_value=0.0, max_value=15.0, value=float(last_sh_p.get("xg_for", 0.0) or 0.0), step=0.05, format="%.2f", key="sh_xgf")
         with c10:
-            xg_against2 = st.number_input("xG Against", min_value=0.0, max_value=15.0, value=0.0, step=0.05, format="%.2f", key="sh_xga")
+            xg_against2 = st.number_input("xG Against", min_value=0.0, max_value=15.0, value=float(last_sh_p.get("xg_against", 0.0) or 0.0), step=0.05, format="%.2f", key="sh_xga")
 
+        snap_note_sh = st.text_input("Snapshot note (optional)", key="sh_note")
         if st.button("Add Snapshot (SH)"):
             score_state2 = ScoreState.WINNING.value if team_goals2 > opp_goals2 else (ScoreState.LOSING.value if team_goals2 < opp_goals2 else ScoreState.DRAWING.value)
             sm.append_event({
@@ -514,6 +706,7 @@ with tabs[3]:
                     "shots_on_target_against": int(sot_against2),
                     "xg_for": float(xg_for2),
                     "xg_against": float(xg_against2),
+                    "note": snap_note_sh.strip() if snap_note_sh and snap_note_sh.strip() else None,
                 }
             })
             st.success(f"Snapshot added for {minute2}' (SH)")
@@ -535,6 +728,11 @@ with tabs[3]:
             rec = recommend(live_ctx)
             if rec:
                 st.write(f"Suggested shout: {rec.shout.value if isinstance(rec.shout, Shout) else rec.shout}")
+                # Rationale
+                if getattr(rec, "notes", None):
+                    with st.expander("Why this"):
+                        for n in rec.notes[:6]:
+                            st.write(f"- {n}")
                 if st.button("Add Shout (SH)"):
                     sm.append_event({
                         "type": "shout",
@@ -588,6 +786,7 @@ with tabs[4]:
                 with c10:
                     ft_xga = st.number_input("xG Against", min_value=0.0, max_value=15.0, value=float(last_p.get("xg_against", 0.0) or 0.0), step=0.05, format="%.2f", key="ft_xga")
 
+                snap_note_ft = st.text_input("Snapshot note (optional)", key="ft_note")
                 if st.button("Add Snapshot (FT)", key="add_ft_snap"):
                     score_state_ft = (
                         ScoreState.WINNING.value if ft_gf > ft_ga else (
@@ -609,6 +808,7 @@ with tabs[4]:
                             "shots_on_target_against": int(ft_soa),
                             "xg_for": float(ft_xgf),
                             "xg_against": float(ft_xga),
+                            "note": snap_note_ft.strip() if snap_note_ft and snap_note_ft.strip() else None,
                         }
                     })
                     st.success(f"Snapshot added for {ft_min}' (FT)")
@@ -620,6 +820,11 @@ with tabs[4]:
                     st.write(f"Gesture: {ft_rec.gesture} • Shout: {ft_rec.shout.value if isinstance(ft_rec.shout, Shout) else ft_rec.shout}")
                     if ft_rec.team_talk:
                         st.write(f"Talk: {ft_rec.team_talk}")
+                    # Rationale
+                    if getattr(ft_rec, "notes", None):
+                        with st.expander("Why this"):
+                            for n in ft_rec.notes[:6]:
+                                st.write(f"- {n}")
                     if st.button("Lock Full-Time", key="lock_ft"):
                         sm.append_event({
                             "type": "decision",
@@ -648,7 +853,9 @@ with tabs[5]:
                 p = e.get("payload", {})
                 score = f"{p.get('score_for', 0)}–{p.get('score_against', 0)}"
                 stats = f"Poss {int(p.get('possession_pct', 0))}% | Shots {p.get('shots_for', 0)}({p.get('shots_on_target_for', 0)}) vs {p.get('shots_against', 0)}({p.get('shots_on_target_against', 0)}) | xG {p.get('xg_for', 0.0):.2f} vs {p.get('xg_against', 0.0):.2f}"
-                st.write(f"- {minute_label} Snapshot — {score} • {stats}")
+                note_txt = p.get('note')
+                note_str = f" • Note: {note_txt}" if note_txt else ""
+                st.write(f"- {minute_label} Snapshot — {score} • {stats}{note_str}")
             else:
                 st.write(f"- {minute_label} {e.get('type').title()} — {e.get('payload', {})}")
 

@@ -90,10 +90,16 @@ tab_g, tab_s, tab_sh = st.tabs(["Gestures", "Statements", "Shouts"])
 with tab_g:
     st.markdown("#### Gestures")
     st.info("📝 **Instructions:** Enter one item per line. Each line becomes a separate gesture or tone.")
+    edit_g = st.checkbox("Enable editing (advanced)", value=False, key="edit_g")
+    st.warning(
+        "Changing tones/gestures can break references in statements and rules. If you rename/remove gestures, update statements and any gesture→statement links to match.",
+        icon="⚠️",
+    )
     
     tones = st.text_area("Tones (one per line)", 
                         value="\n".join(catalogs.get("tones", [])),
-                        help="Define the different emotional tones available (e.g., calm, assertive, motivational)")
+                        help="Define the different emotional tones available (e.g., calm, assertive, motivational)",
+                        disabled=not edit_g)
     
     st.markdown("##### Gestures by tone")
     st.caption("💡 Add one gesture per line for each tone. These are the physical actions/expressions your manager can make.")
@@ -104,9 +110,10 @@ with tab_g:
         default_lines = catalogs.get("gestures", {}).get(tone, [])
         txt = st.text_area(f"{tone} gestures", 
                           value="\n".join(default_lines),
-                          help=f"Enter {tone} gestures, one per line (e.g., 'Nod approvingly', 'Point to the pitch')")
+                          help=f"Enter {tone} gestures, one per line (e.g., 'Nod approvingly', 'Point to the pitch')",
+                          disabled=not edit_g)
         new_gestures_map[tone] = [ln.strip() for ln in txt.splitlines() if ln.strip()]
-    if st.button("Save gestures"):
+    if st.button("Save gestures", disabled=not edit_g):
         try:
             catalogs.update({
                 "tones": tone_list,
@@ -119,6 +126,11 @@ with tab_g:
 
 with tab_s:
     st.markdown("#### Statements")
+    edit_s = st.checkbox("Enable editing (advanced)", value=False, key="edit_s")
+    st.warning(
+        "Editing statements affects the phrases shown in the app. Removing or reordering items can desync any gesture→statement index mappings.",
+        icon="⚠️",
+    )
     tones_list = catalogs.get("tones", [])
     
     # Initialize all sections
@@ -136,10 +148,11 @@ with tab_s:
             txt = st.text_area(f"PreMatch • {gesture}", 
                               value="\n".join(statements.get("PreMatch", {}).get(gesture, [])), 
                               key=f"pm_gesture_{i}_{gesture.replace(' ', '_').replace('-', '_')}",
-                              help=f"Enter statements available when using '{gesture}' gesture, one per line")
+                              help=f"Enter statements available when using '{gesture}' gesture, one per line",
+                              disabled=not edit_s)
             new_pm[gesture] = [ln.strip() for ln in txt.splitlines() if ln.strip()]
         
-        if st.button("Save PreMatch", key="save_pm"):
+        if st.button("Save PreMatch", key="save_pm", disabled=not edit_s):
             try:
                 statements["PreMatch"] = new_pm
                 statements_fp.write_text(json.dumps(statements, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -161,11 +174,12 @@ with tab_s:
                 txt = st.text_area(key, 
                                   value="\n".join(((statements.get("HalfTime", {}).get(sc, {}) or {}).get(gesture, []))), 
                                   key=f"ht_{sc}_gesture_{i}_{gesture.replace(' ', '_').replace('-', '_')}",
-                                  help=f"Enter statements available when {sc.lower()} and using '{gesture}' gesture, one per line")
+                                  help=f"Enter statements available when {sc.lower()} and using '{gesture}' gesture, one per line",
+                                  disabled=not edit_s)
                 row[gesture] = [ln.strip() for ln in txt.splitlines() if ln.strip()]
             new_ht[sc] = row
         
-        if st.button("Save HalfTime", key="save_ht"):
+        if st.button("Save HalfTime", key="save_ht", disabled=not edit_s):
             try:
                 statements["HalfTime"] = new_ht
                 statements_fp.write_text(json.dumps(statements, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -187,11 +201,12 @@ with tab_s:
                 txt = st.text_area(key, 
                                   value="\n".join(((statements.get("FullTime", {}).get(sc, {}) or {}).get(gesture, []))), 
                                   key=f"ft_{sc}_gesture_{i}_{gesture.replace(' ', '_').replace('-', '_')}",
-                                  help=f"Enter statements available after {sc.lower()} and using '{gesture}' gesture, one per line")
+                                  help=f"Enter statements available after {sc.lower()} and using '{gesture}' gesture, one per line",
+                                  disabled=not edit_s)
                 row[gesture] = [ln.strip() for ln in txt.splitlines() if ln.strip()]
             new_ft[sc] = row
         
-        if st.button("Save FullTime", key="save_ft"):
+        if st.button("Save FullTime", key="save_ft", disabled=not edit_s):
             try:
                 statements["FullTime"] = new_ft
                 statements_fp.write_text(json.dumps(statements, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -201,7 +216,7 @@ with tab_s:
     
     # Save All Button
     st.divider()
-    if st.button("💾 Save All Statements", key="save_all"):
+    if st.button("💾 Save All Statements", key="save_all", disabled=not edit_s):
         try:
             statements["PreMatch"] = new_pm
             statements["HalfTime"] = new_ht
@@ -214,6 +229,11 @@ with tab_s:
 with tab_sh:
     st.markdown("#### Shouts (In-Play Touchline Commands)")
     st.info("🎯 **Key Difference:** Shouts are for in-play match action, separate from team talk gestures/statements")
+    edit_sh = st.checkbox("Enable editing (advanced)", value=False, key="edit_sh")
+    st.warning(
+        "Changing shout contexts or rules can lead to unexpected in-play suggestions. Be cautious with cooldowns and suppression rules.",
+        icon="⚠️",
+    )
     
     # Shout Context Configuration
     with st.expander("🎮 Shout Contexts & Effectiveness", expanded=True):
@@ -236,14 +256,16 @@ with tab_sh:
                     f"Description", 
                     value=current_context.get("description", ""),
                     key=f"shout_desc_{shout.replace(' ', '_')}",
-                    help=f"What does {shout} do?"
+                    help=f"What does {shout} do?",
+                    disabled=not edit_sh
                 )
                 
                 best_when = st.text_area(
                     f"Best when (one per line)",
                     value="\n".join(current_context.get("best_when", [])),
                     key=f"shout_best_{shout.replace(' ', '_')}",
-                    help=f"Contexts where {shout} works well"
+                    help=f"Contexts where {shout} works well",
+                    disabled=not edit_sh
                 )
             
             with col2:
@@ -251,7 +273,8 @@ with tab_sh:
                     f"Avoid when (one per line)",
                     value="\n".join(current_context.get("avoid_when", [])),
                     key=f"shout_avoid_{shout.replace(' ', '_')}",
-                    help=f"Contexts where {shout} should not be used"
+                    help=f"Contexts where {shout} should not be used",
+                    disabled=not edit_sh
                 )
             
             new_contexts[shout] = {
@@ -275,7 +298,8 @@ with tab_sh:
                 options=available_shouts,
                 default=current_mapping,
                 key=f"tone_map_{tone}",
-                help=f"Which shouts work well with {tone} tone?"
+                help=f"Which shouts work well with {tone} tone?",
+                disabled=not edit_sh
             )
             new_tone_mapping[tone] = selected_shouts
     
@@ -292,7 +316,8 @@ with tab_sh:
                 "Same shout cooldown (minutes)",
                 min_value=1, max_value=20,
                 value=current_cooldowns.get("same_shout_minutes", 8),
-                help="Minimum time before repeating the same shout"
+                help="Minimum time before repeating the same shout",
+                disabled=not edit_sh
             )
         
         with col2:
@@ -300,7 +325,8 @@ with tab_sh:
                 "Max shouts per half",
                 min_value=1, max_value=15, 
                 value=current_cooldowns.get("max_shouts_per_half", 6),
-                help="Maximum number of shouts allowed per half"
+                help="Maximum number of shouts allowed per half",
+                disabled=not edit_sh
             )
         
         with col3:
@@ -308,7 +334,8 @@ with tab_sh:
                 "Praise window (minutes)",
                 min_value=1, max_value=10,
                 value=current_cooldowns.get("praise_window_after_positive", 3),
-                help="Time window to praise after positive events"
+                help="Time window to praise after positive events",
+                disabled=not edit_sh
             )
     
     # Suppression Rules
@@ -323,7 +350,8 @@ with tab_sh:
                 "Yellow cards threshold",
                 min_value=1, max_value=5,
                 value=2,
-                help="Suppress aggressive shouts when this many yellows"
+                help="Suppress aggressive shouts when this many yellows",
+                disabled=not edit_sh
             )
         
         with col2:
@@ -331,7 +359,8 @@ with tab_sh:
                 "Suppress these shouts",
                 options=["Fire Up", "Demand More"],
                 default=["Fire Up", "Demand More"],
-                help="Which shouts to suppress when too many yellows"
+                help="Which shouts to suppress when too many yellows",
+                disabled=not edit_sh
             )
         
         st.markdown("**Time-based Suppression**")
@@ -339,11 +368,12 @@ with tab_sh:
             "Late game suppression (when winning)",
             options=["Fire Up", "Demand More"],
             default=["Fire Up"],
-            help="Suppress these shouts when winning in final 15 minutes"
+            help="Suppress these shouts when winning in final 15 minutes",
+            disabled=not edit_sh
         )
     
     # Save Button for Shouts
-    if st.button("💾 Save Shout Configuration", key="save_shouts"):
+    if st.button("💾 Save Shout Configuration", key="save_shouts", disabled=not edit_sh):
         try:
             # Update shouts config
             new_shouts_config = {

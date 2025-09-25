@@ -33,6 +33,15 @@ class FavStatus(str, Enum):
     UNDERDOG = "Underdog"
 
 
+class FavTier(str, Enum):
+    """More granular matchup tiers (derived from advantage score)."""
+    STRONG_FAVOURITE = "StrongFavourite"
+    SLIGHT_FAVOURITE = "SlightFavourite"
+    EVEN = "Even"
+    SLIGHT_UNDERDOG = "SlightUnderdog"
+    STRONG_UNDERDOG = "StrongUnderdog"
+
+
 class Venue(str, Enum):
     """Match venue"""
     HOME = "Home"

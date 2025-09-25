@@ -1,5 +1,5 @@
 from domain.models import *
-from domain.rules_engine import recommend
+from domain.rules_engine import recommend, detect_fav_status
 
 
 def make_ctx(**kwargs):
@@ -50,3 +50,19 @@ def test_numeric_score_derives_score_state():
     assert rec is not None
     # Early Winning path selects Focus + Balanced
     assert rec.shout == Shout.FOCUS
+
+
+def test_favourite_detection_away_is_stricter():
+    # Bristol Rovers case: Away, slightly worse position (7 vs 5), slightly better recent form.
+    # With config: away penalty + require both pos and form to be favourite away, expect Underdog.
+    ctx = Context(
+        stage=MatchStage.PRE_MATCH,
+        fav_status=FavStatus.FAVOURITE,  # initial value should be ignored by detect
+        venue=Venue.AWAY,
+        team_position=7,
+        opponent_position=5,
+        team_form="LWLDW",
+        opponent_form="LLLWD",
+    )
+    fav, _ = detect_fav_status(ctx)
+    assert fav == FavStatus.UNDERDOG
