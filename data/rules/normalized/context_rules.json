@@ -1,0 +1,257 @@
+{
+  "$schema": "https://example.com/fm24-context-rules-schema.json",
+  "version": "1.0.0",
+  "description": "Context detection and tone selection rules - completely configurable",
+  
+  "context_detection": {
+    "favorite_underdog_rules": {
+      "league_position": {
+        "weight": 1.0,
+        "thresholds": {
+          "strong_advantage": { "min_gap": 8, "score": 2 },
+          "advantage": { "min_gap": 3, "score": 1 },
+          "neutral": { "max_gap": 2, "score": 0 },
+          "disadvantage": { "max_gap": -3, "score": -1 },
+          "strong_disadvantage": { "max_gap": -8, "score": -2 }
+        }
+      },
+      "form": {
+        "weight": 1.0,
+        "scoring": {
+          "W": 3, "D": 1, "L": 0
+        },
+        "thresholds": {
+          "much_better": { "min_diff": 6, "score": 2 },
+          "better": { "min_diff": 2, "score": 1 },
+          "similar": { "max_diff": 1, "score": 0 },
+          "worse": { "max_diff": -2, "score": -1 },
+          "much_worse": { "max_diff": -6, "score": -2 }
+        }
+      },
+      "venue": {
+        "weight": 1.0,
+        "scores": {
+          "HOME": 1,
+          "AWAY": 0,
+          "NEUTRAL": 0
+        }
+      },
+      "final_calculation": {
+        "favorite_threshold": 1,
+        "underdog_threshold": 0
+      }
+    }
+  },
+
+  "tone_selection": {
+    "base_weights": {
+      "calm": 1.0,
+      "assertive": 1.0,
+      "motivational": 1.0,
+      "relaxed": 1.0,
+      "aggressive": 1.0
+    },
+    
+    "context_modifiers": {
+      "venue": {
+        "HOME": {
+          "assertive": 0.3,
+          "motivational": 0.2,
+          "aggressive": 0.1
+        },
+        "AWAY": {
+          "calm": 0.4,
+          "relaxed": 0.2,
+          "assertive": -0.2,
+          "aggressive": -0.3
+        }
+      },
+      
+      "favorite_status": {
+        "FAVOURITE": {
+          "assertive": 0.3,
+          "motivational": 0.2,
+          "aggressive": 0.1
+        },
+        "UNDERDOG": {
+          "calm": 0.3,
+          "relaxed": 0.2,
+          "assertive": -0.2
+        }
+      },
+      
+      "match_stage": {
+        "PRE_MATCH": {
+          "motivational": 0.2,
+          "aggressive": -0.4
+        },
+        "HALF_TIME": {
+          "assertive": 0.1
+        },
+        "FULL_TIME": {
+          "calm": 0.2,
+          "aggressive": -0.3
+        }
+      },
+      
+      "score_state": {
+        "WINNING": {
+          "calm": 0.2,
+          "relaxed": 0.1,
+          "aggressive": -0.2
+        },
+        "DRAWING": {
+          "motivational": 0.1,
+          "assertive": 0.1
+        },
+        "LOSING": {
+          "motivational": 0.3,
+          "assertive": 0.2,
+          "aggressive": 0.1
+        }
+      },
+      
+      "special_situations": {
+        "DERBY": {
+          "motivational": 0.3,
+          "aggressive": -0.2
+        },
+        "FINAL": {
+          "calm": 0.3,
+          "relaxed": 0.2,
+          "aggressive": -0.3
+        },
+        "CUP": {
+          "motivational": 0.2
+        }
+      },
+      
+      "form_trend": {
+        "hot_streak": {
+          "condition": { "recent_form_score": { ">=": 9 } },
+          "modifiers": {
+            "assertive": 0.2,
+            "motivational": 0.1
+          }
+        },
+        "poor_form": {
+          "condition": { "recent_form_score": { "<=": 3 } },
+          "modifiers": {
+            "calm": 0.3,
+            "relaxed": 0.1,
+            "aggressive": -0.2
+          }
+        }
+      },
+      
+      "morale_trend": {
+        "high_morale": {
+          "condition": { "morale_trend": { ">=": 1 } },
+          "modifiers": {
+            "assertive": 0.2,
+            "motivational": 0.15
+          }
+        },
+        "low_morale": {
+          "condition": { "morale_trend": { "<=": -1 } },
+          "modifiers": {
+            "calm": 0.3,
+            "relaxed": 0.2,
+            "aggressive": -0.2
+          }
+        }
+      }
+    },
+    
+    "disallow_rules": {
+      "pre_match_aggressive": {
+        "condition": { "match_stage": "PRE_MATCH" },
+        "disallow": ["aggressive"]
+      },
+      "away_underdog_aggressive": {
+        "condition": { 
+          "venue": "AWAY",
+          "favorite_status": "UNDERDOG"
+        },
+        "disallow": ["aggressive"]
+      },
+      "final_aggressive": {
+        "condition": { "special_situations": ["FINAL"] },
+        "disallow": ["aggressive"]
+      }
+    }
+  },
+
+  "gesture_selection": {
+    "tone_gesture_mapping": {
+      "calm": ["No Gesture", "Hands together"],
+      "assertive": ["Point finger", "Hands on hips"],
+      "motivational": ["Pump fists", "Outstretched arms"],
+      "relaxed": ["Hands in pockets"],
+      "aggressive": ["Thrust arms"]
+    },
+    
+    "context_overrides": {
+      "pre_match": {
+        "condition": { "match_stage": "PRE_MATCH" },
+        "rules": {
+          "favorite": {
+            "condition": { "favorite_status": "FAVOURITE" },
+            "gesture": "Point finger"
+          },
+          "underdog": {
+            "condition": { "favorite_status": "UNDERDOG" },
+            "gesture": "Outstretched arms"
+          }
+        }
+      },
+      
+      "half_time_losing": {
+        "condition": { 
+          "match_stage": "HALF_TIME",
+          "score_state": "LOSING"
+        },
+        "rules": {
+          "favorite_big_deficit": {
+            "condition": { 
+              "favorite_status": "FAVOURITE",
+              "score_delta": { "<=": -2 }
+            },
+            "gesture": "Thrust arms"
+          },
+          "favorite_small_deficit": {
+            "condition": { 
+              "favorite_status": "FAVOURITE",
+              "score_delta": { ">": -2 }
+            },
+            "gesture": "Point finger"
+          },
+          "underdog": {
+            "condition": { "favorite_status": "UNDERDOG" },
+            "gesture": "Hands together"
+          }
+        }
+      }
+    }
+  },
+
+  "statement_selection": {
+    "priority_rules": [
+      {
+        "name": "gesture_specific",
+        "condition": { "has_gesture_mapping": true },
+        "action": "use_gesture_mapping"
+      },
+      {
+        "name": "tone_based",
+        "condition": { "tone_detected": true },
+        "action": "use_tone_statements"
+      },
+      {
+        "name": "fallback",
+        "condition": {},
+        "action": "use_default_calm"
+      }
+    ]
+  }
+}

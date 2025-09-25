@@ -1,0 +1,113 @@
+{
+  "version": "1.0.0",
+  "description": "Live match statistics analysis rules",
+  
+  "stats_analysis": {
+    "possession_rules": [
+      {
+        "name": "low_possession_favorite",
+        "condition": {
+          "possession_pct": { "<": 40 },
+          "favorite_status": "FAVOURITE",
+          "score_state": ["DRAWING", "LOSING"]
+        },
+        "tone_adjustments": {
+          "calm": 0.2,
+          "relaxed": 0.1
+        },
+        "message_overlay": "take_control",
+        "priority": 8
+      },
+      {
+        "name": "dominating_possession",
+        "condition": {
+          "possession_pct": { ">": 65 },
+          "score_state": ["DRAWING", "LOSING"]
+        },
+        "tone_adjustments": {
+          "motivational": 0.2,
+          "assertive": 0.1
+        },
+        "message_overlay": "push_harder",
+        "priority": 7
+      }
+    ],
+    
+    "shooting_rules": [
+      {
+        "name": "creating_chances_not_scoring",
+        "condition": {
+          "shots_for": { "shots_against_diff": ">3" },
+          "score_state": ["DRAWING", "LOSING"]
+        },
+        "tone_adjustments": {
+          "motivational": 0.2,
+          "calm": 0.1
+        },
+        "message_overlay": "push_on",
+        "priority": 9
+      },
+      {
+        "name": "being_outshot_while_winning",
+        "condition": {
+          "shots_against": { "shots_for_diff": ">4" },
+          "score_state": "WINNING",
+          "match_stage": ["LATE", "VERY_LATE"]
+        },
+        "tone_adjustments": {
+          "calm": 0.3,
+          "assertive": 0.1
+        },
+        "message_overlay": "see_it_out",
+        "priority": 8
+      }
+    ],
+    
+    "xg_rules": [
+      {
+        "name": "xg_advantage_not_reflected",
+        "condition": {
+          "xg_delta": { ">": 0.8 },
+          "score_state": ["DRAWING", "LOSING"]
+        },
+        "tone_adjustments": {
+          "motivational": 0.25,
+          "calm": 0.15
+        },
+        "message_overlay": "keep_believing",
+        "priority": 10
+      }
+    ]
+  },
+  
+  "message_overlays": {
+    "push_on": {
+      "calm": "We're on top — keep going and the goal will come.",
+      "assertive": "We've had the chances — be sharper and make it count.",
+      "motivational": "This is there for you — keep pushing and believe.",
+      "relaxed": "Stay composed — our moment will come.",
+      "aggressive": "We should be ahead — raise the standard in the box."
+    },
+    "see_it_out": {
+      "calm": "Stay switched on and manage the game.",
+      "assertive": "Concentrate — see it out.",
+      "motivational": "Dig in together — finish the job.",
+      "relaxed": "Keep it tidy and close it out.",
+      "aggressive": "Cut out the chances we're gifting them."
+    },
+    "take_control": {
+      "calm": "Keep it simple, secure possession, and build.",
+      "assertive": "Be braver in possession — take control.",
+      "motivational": "Show for the ball and impose yourselves.",
+      "relaxed": "Settle down and keep the ball.",
+      "aggressive": "Stop forcing it — take care of the ball."
+    },
+    "keep_believing": {
+      "calm": "The chances are coming — stay patient.",
+      "assertive": "We're creating enough — be more clinical.",
+      "motivational": "Keep going — the breakthrough is coming!",
+      "relaxed": "Trust the process — it will come.",
+      "aggressive": "We're wasting good positions — be sharper!"
+    }
+  }
+}

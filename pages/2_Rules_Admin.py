@@ -65,7 +65,7 @@ default_gesture_statements = {
 }
 gesture_statements = _load_json_or(default_gesture_statements, gesture_statements_fp)
 
-tab_g, tab_s, tab_l = st.tabs(["Gestures", "Statements", "Links (Gesture → Statements)"])
+tab_g, tab_s = st.tabs(["Gestures", "Statements"])
 
 with tab_g:
     st.markdown("#### Gestures")
@@ -108,14 +108,16 @@ with tab_s:
     
     # PreMatch Section
     with st.expander("🎯 PreMatch Statements", expanded=False):
-        st.info("📝 **Instructions:** Enter one statement per line. These are things your manager says before the match starts.")
-        st.markdown("##### PreMatch by tone")
-        for t in tones_list:
-            txt = st.text_area(f"PreMatch • {t}", 
-                              value="\n".join(statements.get("PreMatch", {}).get(t, [])), 
-                              key=f"pm_{t}",
-                              help=f"Enter {t} pre-match statements, one per line (e.g., 'Let's show them what we're made of!')")
-            new_pm[t] = [ln.strip() for ln in txt.splitlines() if ln.strip()]
+        st.info("📝 **Instructions:** Enter one statement per line. These are things your manager says before the match starts, organized by gesture.")
+        st.markdown("##### PreMatch by gesture")
+        gestures_all = sorted({g for arr in catalogs.get("gestures", {}).values() for g in arr})
+        all_gestures = ["No Gesture"] + [g for g in gestures_all if g != "No Gesture"]
+        for i, gesture in enumerate(all_gestures):
+            txt = st.text_area(f"PreMatch • {gesture}", 
+                              value="\n".join(statements.get("PreMatch", {}).get(gesture, [])), 
+                              key=f"pm_gesture_{i}_{gesture.replace(' ', '_').replace('-', '_')}",
+                              help=f"Enter statements available when using '{gesture}' gesture, one per line")
+            new_pm[gesture] = [ln.strip() for ln in txt.splitlines() if ln.strip()]
         
         if st.button("Save PreMatch", key="save_pm"):
             try:
@@ -127,18 +129,20 @@ with tab_s:
     
     # HalfTime Section
     with st.expander("⏰ HalfTime Statements", expanded=False):
-        st.info("📝 **Instructions:** Enter one statement per line. These are things your manager says at half-time based on the current score situation.")
-        st.markdown("##### HalfTime by score and tone")
+        st.info("📝 **Instructions:** Enter one statement per line. These are things your manager says at half-time based on score situation and gesture.")
+        st.markdown("##### HalfTime by score and gesture")
+        gestures_all = sorted({g for arr in catalogs.get("gestures", {}).values() for g in arr})
+        all_gestures = ["No Gesture"] + [g for g in gestures_all if g != "No Gesture"]
         for sc in [s.value for s in ScoreState]:
             st.markdown(f"**{sc}**")
             row = {}
-            for t in tones_list:
-                key = f"HT • {sc} • {t}"
+            for i, gesture in enumerate(all_gestures):
+                key = f"HT • {sc} • {gesture}"
                 txt = st.text_area(key, 
-                                  value="\n".join(((statements.get("HalfTime", {}).get(sc, {}) or {}).get(t, []))), 
-                                  key=f"ht_{sc}_{t}",
-                                  help=f"Enter {t} half-time statements when {sc.lower()}, one per line")
-                row[t] = [ln.strip() for ln in txt.splitlines() if ln.strip()]
+                                  value="\n".join(((statements.get("HalfTime", {}).get(sc, {}) or {}).get(gesture, []))), 
+                                  key=f"ht_{sc}_gesture_{i}_{gesture.replace(' ', '_').replace('-', '_')}",
+                                  help=f"Enter statements available when {sc.lower()} and using '{gesture}' gesture, one per line")
+                row[gesture] = [ln.strip() for ln in txt.splitlines() if ln.strip()]
             new_ht[sc] = row
         
         if st.button("Save HalfTime", key="save_ht"):
@@ -151,18 +155,20 @@ with tab_s:
     
     # FullTime Section
     with st.expander("🏁 FullTime Statements", expanded=False):
-        st.info("📝 **Instructions:** Enter one statement per line. These are things your manager says after the match based on the final result.")
-        st.markdown("##### FullTime by score and tone")
+        st.info("📝 **Instructions:** Enter one statement per line. These are things your manager says after the match based on final result and gesture.")
+        st.markdown("##### FullTime by score and gesture")
+        gestures_all = sorted({g for arr in catalogs.get("gestures", {}).values() for g in arr})
+        all_gestures = ["No Gesture"] + [g for g in gestures_all if g != "No Gesture"]
         for sc in [s.value for s in ScoreState]:
             st.markdown(f"**{sc}**")
             row = {}
-            for t in tones_list:
-                key = f"FT • {sc} • {t}"
+            for i, gesture in enumerate(all_gestures):
+                key = f"FT • {sc} • {gesture}"
                 txt = st.text_area(key, 
-                                  value="\n".join(((statements.get("FullTime", {}).get(sc, {}) or {}).get(t, []))), 
-                                  key=f"ft_{sc}_{t}",
-                                  help=f"Enter {t} full-time statements after {sc.lower()}, one per line")
-                row[t] = [ln.strip() for ln in txt.splitlines() if ln.strip()]
+                                  value="\n".join(((statements.get("FullTime", {}).get(sc, {}) or {}).get(gesture, []))), 
+                                  key=f"ft_{sc}_gesture_{i}_{gesture.replace(' ', '_').replace('-', '_')}",
+                                  help=f"Enter statements available after {sc.lower()} and using '{gesture}' gesture, one per line")
+                row[gesture] = [ln.strip() for ln in txt.splitlines() if ln.strip()]
             new_ft[sc] = row
         
         if st.button("Save FullTime", key="save_ft"):
@@ -185,166 +191,7 @@ with tab_s:
         except Exception as e:
             st.error(f"Failed to save statements: {e}")
 
-with tab_l:
-    st.markdown("#### Configure Statement Availability for Gestures")
-    st.info("🔗 **Instructions:** Configure which statements remain available (white) vs greyed out when each gesture is selected. This mirrors the FM24 behavior you see in-game.")
-    
-    # Quick setup section
-    with st.expander("⚡ Quick Setup - Apply Gesture to Multiple Statements", expanded=True):
-        st.markdown("**Batch assign a gesture to multiple statements at once**")
-        
-        col1, col2, col3 = st.columns([1, 1, 2])
-        with col1:
-            quick_stage = st.selectbox("Stage", options=[MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME], format_func=lambda x: x.value, key="quick_stage")
-        with col2:
-            quick_score = None
-            if quick_stage in (MatchStage.HALF_TIME, MatchStage.FULL_TIME):
-                quick_score = st.selectbox("Score", options=[ScoreState.WINNING, ScoreState.DRAWING, ScoreState.LOSING], format_func=lambda x: x.value, key="quick_score")
-        with col3:
-            gestures_all = sorted({g for arr in catalogs.get("gestures", {}).values() for g in arr})
-            quick_gesture = st.selectbox("Gesture to Apply", options=["No Gesture"] + gestures_all, key="quick_gesture")
-        
-        if quick_gesture != "No Gesture":
-            st.markdown(f"**Statements available when '{quick_gesture}' is selected:**")
-            
-            # Get statements for this stage/score
-            tones_list = catalogs.get("tones", [])
-            for tone in tones_list:
-                if quick_stage == MatchStage.PRE_MATCH:
-                    tone_statements = statements.get("PreMatch", {}).get(tone, [])
-                else:
-                    key = "HalfTime" if quick_stage == MatchStage.HALF_TIME else "FullTime"
-                    tone_statements = ((statements.get(key, {}).get(quick_score.value, {}) or {}).get(tone, []))
-                
-                if tone_statements:
-                    st.markdown(f"**{tone.upper()} Statements:**")
-                    
-                    # Get current settings
-                    def _quick_node():
-                        if quick_stage == MatchStage.PRE_MATCH:
-                            gs = gesture_statements.setdefault("PreMatch", {})
-                            return gs.setdefault(quick_gesture, {})
-                        key = "HalfTime" if quick_stage == MatchStage.HALF_TIME else "FullTime"
-                        gs = gesture_statements.setdefault(key, {})
-                        gs = gs.setdefault(quick_score.value, {})
-                        return gs.setdefault(quick_gesture, {})
-                    
-                    quick_node = _quick_node()
-                    allowed_idx = set(quick_node.get(tone, []))
-                    
-                    # Create columns for better layout
-                    cols = st.columns(2)
-                    new_allowed = []
-                    
-                    for i, stmt in enumerate(tone_statements):
-                        col_idx = i % 2
-                        with cols[col_idx]:
-                            checked = st.checkbox(
-                                stmt[:80] + "..." if len(stmt) > 80 else stmt, 
-                                value=(i in allowed_idx), 
-                                key=f"quick_{quick_stage.value}_{quick_score.value if quick_score else 'NA'}_{quick_gesture}_{tone}_{i}"
-                            )
-                            if checked:
-                                new_allowed.append(i)
-                    
-                    quick_node[tone] = new_allowed
-            
-            col_save, col_clear = st.columns(2)
-            with col_save:
-                if st.button("💾 Save Configuration", key="save_quick"):
-                    try:
-                        gesture_statements_fp.write_text(json.dumps(gesture_statements, indent=2, ensure_ascii=False), encoding="utf-8")
-                        st.success(f"Saved configuration for '{quick_gesture}'!")
-                    except Exception as e:
-                        st.error(f"Failed to save: {e}")
-            
-            with col_clear:
-                if st.button("🗑️ Clear All for this Gesture", key="clear_quick"):
-                    try:
-                        quick_node = _quick_node()
-                        for tone in tones_list:
-                            quick_node[tone] = []
-                        gesture_statements_fp.write_text(json.dumps(gesture_statements, indent=2, ensure_ascii=False), encoding="utf-8")
-                        st.success(f"Cleared all statements for '{quick_gesture}'!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Failed to clear: {e}")
-    
-    # Original detailed section
-    with st.expander("🔧 Advanced - Individual Statement Configuration", expanded=False):
-        st.caption("Fine-tune individual statement availability per gesture")
-        
-        stg = st.selectbox("Stage", options=[MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME], format_func=lambda x: x.value, key="adv_stage")
-        sel_score = None
-        if stg in (MatchStage.HALF_TIME, MatchStage.FULL_TIME):
-            sel_score = st.selectbox("Score state", options=[ScoreState.WINNING, ScoreState.DRAWING, ScoreState.LOSING], format_func=lambda x: x.value, key="adv_score")
-        
-        gestures_all = sorted({g for arr in catalogs.get("gestures", {}).values() for g in arr})
-        gest = st.selectbox("Gesture", options=gestures_all, key="adv_gesture")
-        
-        # Access the mapping node for this selection
-        def _node():
-            if stg == MatchStage.PRE_MATCH:
-                gs = gesture_statements.setdefault("PreMatch", {})
-                return gs.setdefault(gest, {})
-            key = "HalfTime" if stg == MatchStage.HALF_TIME else "FullTime"
-            gs = gesture_statements.setdefault(key, {})
-            gs = gs.setdefault(sel_score.value, {})
-            return gs.setdefault(gest, {})
 
-        node = _node()
-        tones_list = catalogs.get("tones", [])
-        
-        for t in tones_list:
-            st.markdown(f"**{t}**")
-            if stg == MatchStage.PRE_MATCH:
-                items = statements.get("PreMatch", {}).get(t, [])
-            else:
-                key = "HalfTime" if stg == MatchStage.HALF_TIME else "FullTime"
-                items = ((statements.get(key, {}).get(sel_score.value, {}) or {}).get(t, []))
-            
-            allowed_idx = set(node.get(t, []))
-            new_allowed = []
-            for i, text in enumerate(items):
-                checked = st.checkbox(text or f"[{t}] #{i}", value=(i in allowed_idx), key=f"adv_{stg.value}_{sel_score.value if sel_score else 'NA'}_{gest}_{t}_{i}")
-                if checked:
-                    new_allowed.append(i)
-            node[t] = new_allowed
-        
-        if st.button("Save Advanced Configuration", key="save_adv"):
-            try:
-                gesture_statements_fp.write_text(json.dumps(gesture_statements, indent=2, ensure_ascii=False), encoding="utf-8")
-                st.success("Advanced configuration saved")
-            except Exception as e:
-                st.error(f"Failed to save: {e}")
-    
-    # Overview section
-    with st.expander("📊 Overview - Current Configuration", expanded=False):
-        st.markdown("##### Configuration Matrix (PreMatch)")
-        try:
-            pm = gesture_statements.get("PreMatch", {})
-            tones_list = catalogs.get("tones", [])
-            gestures_all = sorted({g for arr in catalogs.get("gestures", {}).values() for g in arr})
-            
-            rows = []
-            for g in gestures_all:
-                row = {"Gesture": g}
-                total = 0
-                for t in tones_list:
-                    count = len((pm.get(g, {}) or {}).get(t, []))
-                    row[t] = count
-                    total += count
-                row["Total"] = total
-                rows.append(row)
-            
-            if rows:
-                st.dataframe(rows, use_container_width=True, hide_index=True)
-                
-                # Summary stats
-                total_configured = sum(row["Total"] for row in rows)
-                st.metric("Total Configured Links", total_configured)
-        except Exception as e:
-            st.error(f"Failed to generate overview: {e}")
 
 st.divider()
 
