@@ -2,7 +2,7 @@ import json
 import streamlit as st
 from pathlib import Path
 
-from services.repository import PlaybookRepository
+from services.repository import Repository
 from domain.models import (
     MatchStage, ScoreState,
 )
@@ -11,7 +11,7 @@ st.title("🧱 Rules Admin — Minimal Tables")
 st.caption("Only the three granular tables: Gestures, Statements, and Gesture↔Statements links.")
 
 st.divider()
-repo = PlaybookRepository()
+repo = Repository()
 try:
     gestures_map = repo.load_gestures()
 except Exception:

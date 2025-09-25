@@ -108,7 +108,7 @@ Scope: ideas only (no implementation). These proposals are grounded in the curre
 - data/policies.json & data/gestures.json: add matrices, ladders, cooldowns, disallow rules, bundle ids.
 - domain/rules_engine.py: add momentum/suppression/escalation helpers; extend choose_inplay_shout and harmonize_talk_with_gesture.
 - components/controls.py & components/cards.py: Talk Composer and Shout Bar surfaces; rationale chips; cooldown timer.
-- tests/test_rules_engine.py & tests/test_schema.py: golden cases, schema validation.
+- tests/test_rules_engine.py: golden cases. Schema validation can be added later if needed for normalized JSON.
 
 ---
 

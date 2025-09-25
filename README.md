@@ -12,35 +12,46 @@ See SPEC.md for the full raw specification and domain brief.
 fm24playbook/
 ├─ app.py                    # thin bootstrapper (routes to /pages)
 ├─ pages/
-│  ├─ 1_Playbook.py         # main interactive playbook page
-│  ├─ 3_Editor.py           # (optional) admin editor for playbook data
-│  └─ 4_About.py            # credits, how-to, change-log
-├─ components/              # UI-only, stateless widgets
-│  ├─ controls.py           # sidebar controls (selectors)
-│  ├─ cards.py              # recommendation cards (mentality/talk/shout/gesture)
-│  ├─ banners.py            # status banners (e.g., "Underdog Away")
-│  ├─ tables.py             # matrix views (cheat-sheet, reactions)
-│  └─ icons.py              # small icon helpers (⚽ 🎙️ ✋ 📢 etc.)
-├─ domain/                  # pure logic (no Streamlit calls)
-│  ├─ models.py             # typed dataclasses / pydantic models
-│  ├─ rules_engine.py       # decision engine (maps context → recommendations)
-│  ├─ reactions.py          # player reaction fixers (lack belief, nervous, etc.)
-│  ├─ presets.py            # predefined scenarios (Derby, Cup, 10 men, etc.)
-│  └─ validators.py         # schema validation for playbook JSON
+│  ├─ 1_Session_Builder.py   # main interactive session builder (uses JSON rules)
+│  └─ 2_Rules_Admin.py       # admin UI to edit normalized rules JSON
+├─ components/               # UI-only, stateless widgets
+│  ├─ controls.py            # sidebar/inline controls
+│  ├─ cards.py               # recommendation cards (mentality/talk/shout/gesture)
+│  ├─ banners.py             # status banners (e.g., "Underdog Away")
+│  ├─ tables.py              # matrix views (cheat-sheet, reactions)
+│  └─ icons.py               # small icon helpers (⚽ 🎙️ ✋ 📢 etc.)
+├─ domain/                   # pure logic (no Streamlit calls)
+│  ├─ models.py              # typed dataclasses / pydantic models
+│  ├─ rules_engine.py        # decision engine (maps context → recommendations)
+│  ├─ reactions.py           # player reaction UI hints/rules separation
+│  ├─ presets.py             # predefined scenarios (Derby, Cup, 10 men, etc.)
+│  └─ validators.py          # placeholder for future schema validation
 ├─ data/
-│  ├─ playbook.json         # single source of truth for rules (see schema)
-│  ├─ gestures.json         # gestures taxonomy & mappings
-│  └─ presets.json          # scenario presets (optional, not used by UI now)
+│  ├─ gestures.json          # gestures taxonomy & mappings
+│  ├─ policies.json          # engine policies and toggles
+│  ├─ presets.json           # scenario presets (optional)
+│  └─ rules/normalized/      # normalized JSON rule files edited by Rules Admin
+│     ├─ base_rules.json
+│     ├─ special_overrides.json
+│     ├─ catalogs.json
+│     ├─ statements.json
+│     ├─ shouts.json
+│     ├─ shout_rules.json
+│     ├─ reaction_hints.json
+│     ├─ reaction_rules.json
+│     ├─ context_rules.json
+│     ├─ stats_rules.json
+│     └─ engine_config.json
 ├─ services/
-│  └─ repository.py         # read/write layer for JSON (future: API/DB)
+│  └─ repository.py          # read/write helpers for JSON (future: API/DB)
 ├─ styles/
-│  └─ theme.py              # theme tokens (spacing, font sizes)
+│  └─ theme.py               # theme tokens (spacing, font sizes)
 ├─ tests/
-│  ├─ test_rules_engine.py  # unit tests for mapping logic
-│  ├─ test_reactions.py     # unit tests for reactions fixer
-│  └─ test_schema.py        # schema validation tests
-├─ README.md                # this file
-└─ CONTRIBUTING.md          # conventions & PR guidelines
+│  ├─ test_rules_engine.py   # unit tests for mapping logic
+│  ├─ test_reactions.py      # unit tests for reactions handling
+│  └─ test_tone_matrix.py    # unit tests for tone matrix behavior
+├─ README.md                 # this file
+└─ CONTRIBUTING.md           # conventions & PR guidelines
 ```
 
 **Principles**
@@ -68,89 +79,19 @@ fm24playbook/
 
 ---
 
-## 🧾 Playbook Data Schema (JSON)
+## 🧾 Rules data layout (normalized JSON)
 
-**File**: `data/playbook.json`
+Rules are defined as small, focused JSON files under `data/rules/normalized/`. Highlights:
 
-```json
-{
-  "$schema": "https://example.com/fm24-playbook.schema.json",
-  "version": "1.0.0",
-  "gestures": ["Point Finger","Hands on Hips","Outstretched Arms","Hands Together","Pump Fists","Thrash Arms"],
-  "rules": [
-    {
-      "when": {
-        "stage": "PreMatch",
-        "favStatus": "Favourite",
-        "venue": "Home"
-      },
-      "recommendation": {
-        "mentality": "Positive",
-        "teamTalk": "We should be winning this — go out and show why.",
-        "gesture": "Point Finger",
-        "shout": "None",
-        "notes": ["Set expectations without overhyping","Individually tell strikers: You can make the difference (Pump Fists)"]
-      }
-    },
-    {
-      "when": {
-        "stage": "PreMatch",
-        "favStatus": "Underdog",
-        "venue": "Away"
-      },
-      "recommendation": {
-        "mentality": "Cautious",
-        "teamTalk": "No pressure, go out and enjoy it.",
-        "gesture": "Outstretched Arms",
-        "shout": "None",
-        "notes": ["Remove fear, frame opportunity","Call out complacent players individually (Hands on Hips)"]
-      }
-    }
-  ],
-  "reactions": [
-    {
-      "reaction": "Complacent",
-      "adjustment": {
-        "teamTalk": "Don't get complacent — keep working.",
-        "gesture": "Point Finger",
-        "shout": "Demand More",
-        "mentalityDelta": 0,
-        "notes": ["Challenge effort, not ability","Avoid over-praise"]
-      }
-    },
-    {
-      "reaction": "Nervous",
-      "adjustment": {
-        "teamTalk": "I've got faith in you.",
-        "gesture": "Outstretched Arms",
-        "shout": "Encourage",
-        "mentalityDelta": -1,
-        "notes": ["Reduce pressure","Keep structure (Balanced/Cautious)"]
-      }
-    }
-  ],
-  "special": [
-    {
-      "tag": "Derby",
-      "overrides": {
-        "preMatch": {"teamTalk":"Do it for the fans.","gesture":"Pump Fists"},
-        "halfTimeLead": {"teamTalk":"Don't let this slip.","gesture":"Point Finger"},
-        "fullTimeWin": {"teamTalk":"You've made the fans proud.","gesture":"Hands Together"}
-      }
-    },
-    {
-      "tag": "Cup",
-      "overrides": {
-        "preMatchUnderdog": {"teamTalk":"No pressure, enjoy it.","gesture":"Outstretched Arms"},
-        "halfTimeLosing": {"teamTalk":"This is your chance to make history.","gesture":"Pump Fists"},
-        "fullTimeWin": {"teamTalk":"Brilliant, enjoy the moment.","gesture":"Hands Together"}
-      }
-    }
-  ]
-}
-```
+- `base_rules.json`: core recommendations by stage/favStatus/venue/scoreState
+- `special_overrides.json`: contextual overrides (Derby, Cup, red cards)
+- `reaction_rules.json`: engine adjustments driven by reactions (mentality deltas, merges)
+- `reaction_hints.json`: UI-only hints for explaining reactions (not used by engine)
+- `catalogs.json`, `statements.json`: tone/gesture catalogs and talk templates
+- `shouts.json`, `shout_rules.json`: shout options and selection heuristics
+- `context_rules.json`, `stats_rules.json`, `engine_config.json`: additional knobs
 
-**Note**: `mentalityDelta` uses a scale for internal mapping: `Defensive(-2)`, `Cautious(-1)`, `Balanced(0)`, `Positive(+1)`, `Attacking(+2)`, `VeryAttacking(+3)`. The rules engine converts base mentality ± delta → final mentality (clamped to range).
+The rules engine loads these files directly; no single monolithic playbook.json is used.
 
 ## 🫳 Gestures Taxonomy (data/gestures.json)
 
@@ -184,21 +125,20 @@ fm24playbook/
 
 ## 🔄 Pages Contracts
 
-- **pages/1_Playbook.py**: Read Context via sidebar → Load playbook.json, gestures.json → Call rules_engine.recommend(context) → Render recommendation_card + hints/notes
-- **pages/3_Editor.py** (optional, can be feature-flagged): Simple UI to add/edit rules → writes back to data/playbook.json
+- `pages/1_Session_Builder.py`: Reads context (and latest snapshot) → calls `rules_engine.recommend(context)` → renders recommendation card + rationale
+- `pages/2_Rules_Admin.py`: Admin UI to edit the normalized JSON files under `data/rules/normalized/`
 
 ## ✅ Testing Targets
 
-- **Mapping**: Given contexts → expected recommendation (mentality, talk, gesture, shout)
-- **Reactions**: Adjustments apply correctly & are composable
-- **Specials**: Derby/Cup overrides merge without losing base notes
-- **Schema**: playbook.json validated pre-run; fail fast with helpful error
+- Mapping: Given contexts → expected recommendation (mentality, talk, gesture, shout)
+- Reactions: Adjustments apply correctly and are composable
+- Specials: Derby/Cup overrides merge without losing base notes
 
 ## 🧭 Contribution Conventions
 
 - One rule per scenario; prefer specific → general fallback.
 - Keep team talks and gestures short & directive.
-- Use notes for nuance; avoid hardcoding logic outside playbook.json.
+- Use notes for nuance; avoid hardcoding logic outside `data/rules/normalized/`.
 - Add unit tests when adding new rules or reactions.
 
 ## 🚀 Roadmap (Optional)

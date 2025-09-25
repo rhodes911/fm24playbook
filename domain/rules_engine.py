@@ -1,6 +1,5 @@
 ﻿"""
-Rules Engine: maps Context → Recommendation using JSON-driven Rules Admin system"
-Rules Engine: maps Context â†’ Recommendation using data/playbook.json
+Rules Engine: maps Context → Recommendation using the JSON-driven Rules Admin system.
 This module has no Streamlit/UI code and can be tested independently.
 """
 from __future__ import annotations
@@ -15,7 +14,7 @@ from .models import (
     Mentality, Shout,
     MatchStage, FavStatus, Venue, ScoreState, SpecialSituation, TalkAudience,
     PlayerReaction,
-    PlaybookData, PlaybookRule, ReactionRule, SpecialRule
+    PlaybookRule, ReactionRule, SpecialRule
 )
 from .tone_matrix import select_tones
 from .segmentation import analyze_units

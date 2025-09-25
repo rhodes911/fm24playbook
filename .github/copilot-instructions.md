@@ -19,5 +19,5 @@
 Notes:
 - Packages installed and unit tests pass.
 - Streamlit app scaffolded with modular pages and components.
-- Playbook JSON and gestures JSON included; schema URL is placeholder.
- - VS Code task "Run app (Streamlit)" starts the app at http://localhost:8502
+- Normalized JSON rules live under data/rules/normalized; gestures.json and policies.json are included.
+- VS Code task "Run app (Streamlit)" starts the app at http://localhost:8502

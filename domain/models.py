@@ -283,14 +283,7 @@ class SpecialRule(BaseModel):
     overrides: Dict[str, SpecialOverride]
 
 
-class PlaybookData(BaseModel):
-    """Complete playbook data structure"""
-    schema_: str = Field(alias="$schema")
-    version: str
-    gestures: List[str]
-    rules: List[PlaybookRule]
-    reactions: List[ReactionRule]
-    special: List[SpecialRule]
+# PlaybookData removed; JSON-driven rules are read directly by the engine.
 
 
 @dataclass

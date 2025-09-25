@@ -284,7 +284,7 @@ These features augment the current rules engine inputs to produce more contextua
 
 ## Immediate next steps
 
-1) Scaffold Session Builder UI (stacked stage cards) in `app.py` or `pages/1_Playbook.py`.
+1) Scaffold Session Builder UI (stacked stage cards) in `app.py` or `pages/1_Session_Builder.py`.
 2) Implement Snapshot model + timeline in `services/session.py` (draft autosave to data/sessions/).
 3) Wire current rules_engine to PreMatch decision; show lock and timeline entry.
 4) Add derived metrics (m_t, P_t, C_t, E_t, V_t) with tests.

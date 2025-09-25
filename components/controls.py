@@ -11,7 +11,7 @@ from domain.models import (
     Context, MatchStage, FavStatus, Venue, ScoreState, SpecialSituation, PlayerReaction, TalkAudience
 )
 from domain.rules_engine import detect_fav_status
-from services.repository import PlaybookRepository
+from services.repository import Repository
 from services.session import serialize_context, deserialize_context
 
 
@@ -347,7 +347,7 @@ def sidebar_context(default: Context | None = None) -> Context:
     # Presets & Reset controls
     st.sidebar.markdown("---")
     st.sidebar.subheader("Presets")
-    repo = PlaybookRepository()
+    repo = Repository()
     presets = repo.load_presets()
     preset_names = [p["name"] for p in presets if isinstance(p, dict) and "name" in p]
     col1, col2 = st.sidebar.columns([2, 1])

@@ -2,7 +2,7 @@
 
 - One rule per scenario; prefer specific → general fallback.
 - Keep team talks and gestures short & directive.
-- Use notes for nuance; avoid hardcoding logic outside `data/playbook.json`.
+- Use notes for nuance; avoid hardcoding logic outside `data/rules/normalized/`.
 - Add or update unit tests when adding new rules or reactions.
 - No UI code in `domain/`; no logic in `components/`.
 
