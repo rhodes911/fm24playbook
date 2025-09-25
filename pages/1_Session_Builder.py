@@ -14,7 +14,6 @@ from domain.models import (
 )
 from domain.rules_engine import recommend, detect_fav_status
 from services.session import SessionManager
-from services.repository import PlaybookRepository
 
 
 def stage_from_minute(minute: Optional[int]) -> MatchStage:
@@ -60,8 +59,6 @@ st.markdown(
 )
 
 sm = SessionManager()
-repo = PlaybookRepository()
-playbook = repo.load_playbook()
 
 # Utilities
 def has_decision(events: List[Dict[str, Any]], stage: MatchStage) -> bool:
@@ -331,7 +328,7 @@ with tabs[0]:
         if has_decision(events, MatchStage.PRE_MATCH):
             st.success("Pre-Match decision locked")
         else:
-            pre_rec = recommend(base_ctx, playbook)
+            pre_rec = recommend(base_ctx)
             if pre_rec:
                 st.write(f"Gesture: {pre_rec.gesture} • Shout: {pre_rec.shout.value if isinstance(pre_rec.shout, Shout) else pre_rec.shout}")
                 if pre_rec.team_talk:
@@ -420,7 +417,7 @@ with tabs[1]:
             live_ctx = context_from_snapshot(base_ctx, latest_snap, stage_from_minute(int(latest_snap.get("minute", 0))))
             if live_ctx.stage in (MatchStage.PRE_MATCH, MatchStage.FULL_TIME, MatchStage.HALF_TIME):
                 live_ctx.stage = MatchStage.MID
-            rec = recommend(live_ctx, playbook)
+            rec = recommend(live_ctx)
             if rec:
                 st.write(f"Suggested shout: {rec.shout.value if isinstance(rec.shout, Shout) else rec.shout}")
                 if st.button("Add Shout (FH)"):
@@ -448,7 +445,7 @@ with tabs[2]:
                 st.info("Add a snapshot at or before 45' to generate HT talk.")
             else:
                 ht_ctx = context_from_snapshot(base_ctx, ht_snap, MatchStage.HALF_TIME)
-                ht_rec = recommend(ht_ctx, playbook)
+                ht_rec = recommend(ht_ctx)
                 if ht_rec:
                     st.write(f"Gesture: {ht_rec.gesture} • Shout: {ht_rec.shout.value if isinstance(ht_rec.shout, Shout) else ht_rec.shout}")
                     if ht_rec.team_talk:
@@ -535,7 +532,7 @@ with tabs[3]:
             live_ctx = context_from_snapshot(base_ctx, latest_snap2, stage_from_minute(int(latest_snap2.get("minute", 0))))
             if live_ctx.stage in (MatchStage.PRE_MATCH, MatchStage.FULL_TIME, MatchStage.HALF_TIME):
                 live_ctx.stage = MatchStage.MID
-            rec = recommend(live_ctx, playbook)
+            rec = recommend(live_ctx)
             if rec:
                 st.write(f"Suggested shout: {rec.shout.value if isinstance(rec.shout, Shout) else rec.shout}")
                 if st.button("Add Shout (SH)"):
@@ -618,7 +615,7 @@ with tabs[4]:
                     st.rerun()
             else:
                 ft_ctx = context_from_snapshot(base_ctx, ft_snap, MatchStage.FULL_TIME)
-                ft_rec = recommend(ft_ctx, playbook)
+                ft_rec = recommend(ft_ctx)
                 if ft_rec:
                     st.write(f"Gesture: {ft_rec.gesture} • Shout: {ft_rec.shout.value if isinstance(ft_rec.shout, Shout) else ft_rec.shout}")
                     if ft_rec.team_talk:

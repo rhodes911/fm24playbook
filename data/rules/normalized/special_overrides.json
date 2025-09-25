@@ -1,0 +1,53 @@
+[
+  {
+    "tag": "Derby",
+    "overrides": {
+      "preMatch": {
+        "teamTalk": "Do it for the fans.",
+        "gesture": "Pump Fists"
+      },
+      "halfTimeLead": {
+        "teamTalk": "Don't let this slip.",
+        "gesture": "Point Finger"
+      },
+      "fullTimeWin": {
+        "teamTalk": "You've made the fans proud.",
+        "gesture": "Hands Together"
+      }
+    }
+  },
+  {
+    "tag": "Cup",
+    "overrides": {
+      "preMatchUnderdog": {
+        "teamTalk": "No pressure, enjoy it.",
+        "gesture": "Outstretched Arms"
+      },
+      "halfTimeLosing": {
+        "teamTalk": "This is your chance to make history.",
+        "gesture": "Pump Fists"
+      },
+      "fullTimeWin": {
+        "teamTalk": "Brilliant, enjoy the moment.",
+        "gesture": "Hands Together"
+      }
+    }
+  },
+  {
+    "tag": "Promotion",
+    "overrides": {
+      "fullTimeWin": {
+        "teamTalk": "Congratulations — you've done it. Enjoy this moment.",
+        "gesture": "Hands Together"
+      },
+      "fullTimeDraw": {
+        "teamTalk": "We've clinched it — savour it together.",
+        "gesture": "Hands Together"
+      },
+      "fullTimeLoss": {
+        "teamTalk": "We've still done it — be proud. We'll put the result right next time.",
+        "gesture": "Hands Together"
+      }
+    }
+  }
+]

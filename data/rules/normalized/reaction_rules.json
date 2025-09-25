@@ -1,0 +1,28 @@
+[
+  {
+    "reaction": "Complacent",
+    "adjustment": {
+      "teamTalk": "Don't get complacent — keep working.",
+      "gesture": "Point Finger",
+      "shout": "Demand More",
+      "mentalityDelta": 0,
+      "notes": [
+        "Challenge effort, not ability",
+        "Avoid over-praise"
+      ]
+    }
+  },
+  {
+    "reaction": "Nervous",
+    "adjustment": {
+      "teamTalk": "I've got faith in you.",
+      "gesture": "Outstretched Arms",
+      "shout": "Encourage",
+      "mentalityDelta": -1,
+      "notes": [
+        "Reduce pressure",
+        "Keep structure (Balanced/Cautious)"
+      ]
+    }
+  }
+]

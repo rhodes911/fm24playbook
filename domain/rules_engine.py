@@ -1,4 +1,5 @@
 ﻿"""
+Rules Engine: maps Context → Recommendation using JSON-driven Rules Admin system"
 Rules Engine: maps Context â†’ Recommendation using data/playbook.json
 This module has no Streamlit/UI code and can be tested independently.
 """
@@ -79,6 +80,27 @@ def _get_statements() -> dict:
     except Exception:
         pass
     return {}
+
+def _load_base_rules() -> List[PlaybookRule]:
+    """Load base rules from JSON configuration - replaces playbook.rules."""
+    from domain.models import PlaybookRule
+    
+    rules_json = _load_config_json("rules/normalized/base_rules.json", [])
+    return [PlaybookRule(**rule) for rule in rules_json]
+
+def _load_special_overrides() -> List[SpecialRule]:
+    """Load special overrides from JSON configuration - replaces playbook.special."""
+    from domain.models import SpecialRule
+    
+    special_json = _load_config_json("rules/normalized/special_overrides.json", [])
+    return [SpecialRule(**rule) for rule in special_json]
+
+def _load_reaction_rules() -> List[ReactionRule]:
+    """Load reaction rules from JSON configuration - replaces playbook.reactions."""
+    from domain.models import ReactionRule
+    
+    reactions_json = _load_config_json("rules/normalized/reaction_rules.json", [])
+    return [ReactionRule(**rule) for rule in reactions_json]
 
 def _gesture_tone(gesture: str) -> str:
     """Get tone for gesture from catalogs.json configuration - REPLACES _GESTURE_TONE dict."""
@@ -822,8 +844,8 @@ def apply_reaction_adjustments(context: Context, rec: Recommendation, reactions:
     return result
 
 
-def recommend(context: Context, playbook: PlaybookData) -> Optional[Recommendation]:
-    """Compute recommendation end-to-end."""
+def recommend(context: Context) -> Optional[Recommendation]:
+    """Compute recommendation end-to-end using JSON-driven configuration."""
     # If numeric score provided, derive score_state for rule matching
     if context.team_goals is not None and context.opponent_goals is not None:
         if context.team_goals > context.opponent_goals:
@@ -838,10 +860,15 @@ def recommend(context: Context, playbook: PlaybookData) -> Optional[Recommendati
     if context.auto_fav_status:
         fav, fav_explanation = detect_fav_status(context)
         context.fav_status = fav
-    base = pick_base_rule(context, playbook.rules)
+    
+    # Load JSON configuration for rules processing
+    base_rules = _load_base_rules()
+    special_overrides = _load_special_overrides()
+    
+    base = pick_base_rule(context, base_rules)
     if base is None:
         return None
-    with_specials = apply_special_overrides(context, base, playbook.special)
+    with_specials = apply_special_overrides(context, base, special_overrides)
     # No shouts at PreMatch, HalfTime, FullTime â€” convert to statements
     if context.stage in (MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME):
         with_specials.shout = Shout.NONE
@@ -852,7 +879,10 @@ def recommend(context: Context, playbook: PlaybookData) -> Optional[Recommendati
     with_shout = choose_inplay_shout(context, with_stats)
     with_time = apply_time_score_heuristics(context, with_shout)
     with_stats_live = apply_live_stats_heuristics(context, with_time)
-    final = apply_reaction_adjustments(context, with_stats_live, playbook.reactions)
+    
+    # Load reaction adjustments from JSON
+    reaction_rules = _load_reaction_rules()
+    final = apply_reaction_adjustments(context, with_stats_live, reaction_rules)
     # Post-adjust gesture to avoid praise-coded OA when behind and pick assertive for favourites
     final = adjust_gesture_for_context(context, final)
     final = harmonize_talk_with_gesture(context, final)
