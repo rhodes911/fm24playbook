@@ -430,5 +430,42 @@
         "I expect to see you all in training tomorrow, you don't deserve a rest after that performance."
       ]
     }
+  },
+  "IndividualTalk": {
+    "Faith": [
+      "I've got faith in you.",
+      "You can do it.",
+      "I believe in you - now show me what you're made of.",
+      "You're better than this, I know you can turn it around.",
+      "Trust yourself out there, you've got the ability."
+    ],
+    "Challenge": [
+      "I expect more.",
+      "You need to step up your game.",
+      "This isn't good enough from you.",
+      "You're capable of so much more than this.",
+      "I need you to show me more commitment."
+    ],
+    "Encourage": [
+      "You can make the difference.",
+      "Keep going, you're doing well.",
+      "I'm counting on you here.",
+      "This is your moment to shine.",
+      "Show them what you can do."
+    ],
+    "Calm": [
+      "Stay focused out there.",
+      "Take a deep breath and concentrate.",
+      "Don't let the pressure get to you.",
+      "Keep your head up and play your game.",
+      "Relax and trust your instincts."
+    ],
+    "Instructions": [
+      "Remember what we practiced.",
+      "Stick to the plan we discussed.",
+      "Focus on your positioning.",
+      "Keep it simple and play your natural game.",
+      "Do what you do best out there."
+    ]
   }
 }

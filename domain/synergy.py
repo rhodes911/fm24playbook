@@ -1,34 +1,34 @@
 from __future__ import annotations
 
 from typing import List
+from pathlib import Path
+import json
 
 from .models import Context, FavStatus, MatchStage
 
-# Local gesture→tone mapping to avoid circular deps
-_GESTURE_TONE = {
-    "Hands Together": "calm",
-    "Outstretched Arms": "calm",
-    "Point Finger": "assertive",
-    "Hands on Hips": "assertive",
-    "Thrash Arms": "angry",
-    "Throw water bottle": "angry",
-    "Pump Fists": "motivational",
-    "Hands in Pockets": "relaxed",
-}
-
-_TONE_GESTURES = {
-    "calm": ["Hands Together", "Outstretched Arms"],
-    "assertive": ["Point Finger", "Hands on Hips"],
-    "angry": ["Thrash Arms", "Throw water bottle"],
-    "motivational": ["Pump Fists"],
-    "relaxed": ["Hands in Pockets"],
-    # "encourage" maps best to calm gestures in FM UI framing
-    "encourage": ["Outstretched Arms", "Hands Together"],
-}
+def _get_catalogs() -> dict:
+    """Load catalogs from JSON configuration."""
+    try:
+        fp = Path(__file__).resolve().parent.parent / "data" / "rules" / "normalized" / "catalogs.json"
+        if fp.exists():
+            return json.loads(fp.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
 
 
 def gesture_tone(gesture: str) -> str:
-    return _GESTURE_TONE.get(gesture, "calm")
+    """Get tone for gesture from JSON configuration."""
+    catalogs = _get_catalogs()
+    gestures_by_tone = catalogs.get("gestures", {})
+    
+    # Find which tone this gesture belongs to
+    for tone, gesture_list in gestures_by_tone.items():
+        if gesture in gesture_list:
+            return tone
+    
+    # Fallback to calm for unknown gestures
+    return "calm"
 
 
 def score_synergy(target_tone: str, gesture: str, ctx: Context) -> float:
@@ -54,4 +54,7 @@ def score_synergy(target_tone: str, gesture: str, ctx: Context) -> float:
 
 
 def suggest_gestures(target_tone: str) -> List[str]:
-    return _TONE_GESTURES.get(target_tone, ["Hands Together"])
+    """Get gestures for tone from JSON configuration."""
+    catalogs = _get_catalogs()
+    gestures_by_tone = catalogs.get("gestures", {})
+    return gestures_by_tone.get(target_tone, ["Hands Together"])

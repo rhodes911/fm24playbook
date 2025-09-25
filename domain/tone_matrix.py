@@ -3,7 +3,7 @@ Tone Matrix: compute ranked tones with weights and a disallow list for risky opt
 given a match context.
 
 Tones used here correspond to talk "tones" (mapped indirectly via gesture categories):
-- calm, encourage, assertive, angry, motivational, relaxed
+- calm, assertive, motivational, relaxed, aggressive
 
 Inputs considered:
 - venue (home/away/neutral)
@@ -21,49 +21,56 @@ Output:
 from __future__ import annotations
 
 from typing import Dict, List, Tuple
+from pathlib import Path
+import json
 
 from .models import Context, SpecialSituation, Venue, FavStatus, MatchStage
 
 
-SUPPORTED_TONES = [
-    "calm",
-    "encourage",
-    "assertive",
-    "angry",
-    "motivational",
-    "relaxed",
-]
+def _get_supported_tones() -> List[str]:
+    """Get supported tones from JSON configuration."""
+    try:
+        fp = Path(__file__).resolve().parent.parent / "data" / "rules" / "normalized" / "catalogs.json"
+        if fp.exists():
+            catalogs = json.loads(fp.read_text(encoding="utf-8"))
+            gestures_by_tone = catalogs.get("gestures", {})
+            return list(gestures_by_tone.keys())
+    except Exception:
+        pass
+    # Fallback list if JSON not available - using JSON-driven tone names
+    return ["calm", "assertive", "motivational", "relaxed", "aggressive"]
 
 
 def _base_weights(ctx: Context) -> Dict[str, float]:
-    # Start with neutral baseline
-    w = {t: 1.0 for t in SUPPORTED_TONES}
-    # Venue: away/neutral favor calm/encourage over assertive/angry
+    # Start with neutral baseline using JSON-driven tones
+    supported_tones = _get_supported_tones()
+    w = {t: 1.0 for t in supported_tones}
+    # Venue: away/neutral favor calm/motivational over assertive/aggressive
     if ctx.venue in (Venue.AWAY,):
         w["calm"] += 0.3
-        w["encourage"] += 0.2
+        w["motivational"] += 0.2
         w["assertive"] -= 0.15
-        w["angry"] -= 0.25
+        w["aggressive"] -= 0.25
         w["relaxed"] += 0.1
     elif ctx.venue == Venue.HOME:
         w["assertive"] += 0.2
         w["motivational"] += 0.2
-    # Status: favourite can lean assertive/motivational; underdog calm/encourage
+    # Status: favourite can lean assertive/motivational; underdog calm/motivational
     if ctx.fav_status == FavStatus.FAVOURITE:
         w["assertive"] += 0.2
         w["motivational"] += 0.1
     else:
         w["calm"] += 0.2
-        w["encourage"] += 0.2
-    # Importance: derby/final raise risk of angry being volatile; cup a bit more motivational
+        w["motivational"] += 0.2
+    # Importance: derby/final raise risk of aggressive being volatile; cup a bit more motivational
     if SpecialSituation.DERBY in ctx.special_situations:
         w["motivational"] += 0.2
-        w["angry"] -= 0.2
+        w["aggressive"] -= 0.2
     if SpecialSituation.FINAL in ctx.special_situations:
         w["calm"] += 0.2
         w["relaxed"] += 0.1
         w["assertive"] -= 0.1
-        w["angry"] -= 0.2
+        w["aggressive"] -= 0.2
     if SpecialSituation.CUP in ctx.special_situations:
         w["motivational"] += 0.15
     return w
@@ -73,7 +80,7 @@ def _apply_dynamic_signals(ctx: Context, w: Dict[str, float]) -> None:
     # Morale trend
     if ctx.morale_trend is not None:
         if ctx.morale_trend <= -1:
-            w["encourage"] += 0.3
+            w["motivational"] += 0.3
             w["calm"] += 0.2
             w["assertive"] -= 0.1
         elif ctx.morale_trend >= 1:
@@ -90,38 +97,37 @@ def _apply_dynamic_signals(ctx: Context, w: Dict[str, float]) -> None:
             delta = None
     if delta is not None:
         if delta < 0:
-            w["encourage"] += 0.2
-            w["motivational"] += 0.1
+            w["motivational"] += 0.2
+            w["calm"] += 0.1
             w["assertive"] += 0.05
             # If we're away and the favourite while trailing at HT, avoid "praise" vibes:
-            # reduce encourage and lean into calm/motivational/assertive guidance.
+            # reduce motivational and lean into calm/assertive guidance.
             if ctx.stage == MatchStage.HALF_TIME and ctx.venue == Venue.AWAY and ctx.fav_status == FavStatus.FAVOURITE:
-                w["encourage"] -= 0.2
+                w["motivational"] -= 0.1
                 w["calm"] += 0.2
                 w["assertive"] += 0.05
-                w["motivational"] += 0.1
         elif delta > 0:
             w["calm"] += 0.2
             w["relaxed"] += 0.1
-    # xThreat proxy: push assertive/motivational when on top; calm/encourage when under
+    # xThreat proxy: push assertive/motivational when on top; calm/motivational when under
     if ctx.xthreat_delta is not None:
         if ctx.xthreat_delta >= 0.25:
             w["assertive"] += 0.2
             w["motivational"] += 0.2
         elif ctx.xthreat_delta <= -0.25:
             w["calm"] += 0.2
-            w["encourage"] += 0.2
+            w["motivational"] += 0.2
     # Discipline and availability
     if ctx.cards_red > 0:
         w["calm"] += 0.3
-        w["encourage"] += 0.2
-        w["angry"] -= 0.3
+        w["motivational"] += 0.2
+        w["aggressive"] -= 0.3
     if ctx.cards_yellow >= 3:
         w["calm"] += 0.1
         w["assertive"] -= 0.05
-        w["angry"] -= 0.1
+        w["aggressive"] -= 0.1
     if ctx.injuries >= 2:
-        w["encourage"] += 0.2
+        w["motivational"] += 0.2
         w["calm"] += 0.1
 
 
@@ -129,35 +135,35 @@ def _disallow(ctx: Context, weights: Dict[str, float]) -> List[str]:
     dis: List[str] = []
     # Generic guardrails by stage
     if ctx.stage == MatchStage.PRE_MATCH:
-        # Avoid angry pre-match unless extreme scenario
-        dis.append("angry")
+        # Avoid aggressive pre-match unless extreme scenario
+        dis.append("aggressive")
     if ctx.stage == MatchStage.FULL_TIME:
-        # Avoid angry if underdog drew/won away
+        # Avoid aggressive if underdog drew/won away
         if ctx.fav_status == FavStatus.UNDERDOG and ctx.venue == Venue.AWAY and (ctx.team_goals or 0) >= (ctx.opponent_goals or 0):
-            dis.append("angry")
+            dis.append("aggressive")
     # Discipline-related blocks
     if ctx.cards_red > 0:
-        if "angry" not in dis:
-            dis.append("angry")
-    # Away underdog at half-time and not leading -> avoid angry hairdryer risk
+        if "aggressive" not in dis:
+            dis.append("aggressive")
+    # Away underdog at half-time and not leading -> avoid aggressive hairdryer risk
     if ctx.stage == MatchStage.HALF_TIME and ctx.venue == Venue.AWAY and ctx.fav_status == FavStatus.UNDERDOG:
-        # Conservative: avoid angry hairdryer away at HT for underdogs regardless of margin
-        if "angry" not in dis:
-            dis.append("angry")
-    # Away favourite trailing at half-time -> avoid "encourage" (can read as praise)
+        # Conservative: avoid aggressive hairdryer away at HT for underdogs regardless of margin
+        if "aggressive" not in dis:
+            dis.append("aggressive")
+    # Away favourite trailing at half-time -> avoid "motivational" (can read as praise)
     if ctx.stage == MatchStage.HALF_TIME and ctx.venue == Venue.AWAY and ctx.fav_status == FavStatus.FAVOURITE:
         delta = ctx.ht_score_delta
         if delta is not None and delta < 0:
-            if "encourage" not in dis:
-                dis.append("encourage")
-    # General safety: as an underdog at HT, avoid angry hairdryer unless exceptional
+            if "motivational" not in dis:
+                dis.append("motivational")
+    # General safety: as an underdog at HT, avoid aggressive hairdryer unless exceptional
     if ctx.stage == MatchStage.HALF_TIME and ctx.fav_status == FavStatus.UNDERDOG:
-        if "angry" not in dis:
-            dis.append("angry")
+        if "aggressive" not in dis:
+            dis.append("aggressive")
     # Final/Derby caution
     if SpecialSituation.FINAL in ctx.special_situations:
-        if "angry" not in dis:
-            dis.append("angry")
+        if "aggressive" not in dis:
+            dis.append("aggressive")
     return dis
 
 

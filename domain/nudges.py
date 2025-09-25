@@ -1,9 +1,30 @@
 from __future__ import annotations
 
+import json
+import random
+from pathlib import Path
 from typing import List
 
 from .models import Context, MatchStage, ScoreState, PlayerReaction
 
+
+def _get_individual_statement(category: str) -> str:
+    """Get a random individual talk statement from JSON configuration."""
+    try:
+        config_path = Path(__file__).parent.parent / "data" / "rules" / "normalized" / "statements.json"
+        with open(config_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        statements = data.get("IndividualTalk", {}).get(category, [])
+        return random.choice(statements) if statements else f"[{category} statement needed]"
+    except (FileNotFoundError, json.JSONDecodeError, IndexError):
+        # Fallback for missing JSON
+        fallbacks = {
+            "Faith": "I've got faith in you.",
+            "Challenge": "I expect more.",
+            "Encourage": "You can do it."
+        }
+        return fallbacks.get(category, f"[{category} statement needed]")
 
 def generate_nudges(ctx: Context) -> List[str]:
     """Produce simple micro-targeting nudges based on available signals.
@@ -13,12 +34,15 @@ def generate_nudges(ctx: Context) -> List[str]:
     hints: List[str] = []
     # Player reactions: quick individual-talk guidance
     if PlayerReaction.NERVOUS in ctx.player_reactions:
-        hints.append("One looks nervous — speak to them individually with faith: Outstretched Arms • 'I've got faith in you.'")
+        faith_statement = _get_individual_statement("Faith")
+        hints.append(f"One looks nervous — speak to them individually with faith: Outstretched Arms • '{faith_statement}'")
         hints.append("Consider Hands Together to reduce pressure on that player.")
     if PlayerReaction.COMPLACENT in ctx.player_reactions:
-        hints.append("If someone is complacent, go assertive to reset standards (Point Finger: 'I expect more.').")
+        challenge_statement = _get_individual_statement("Challenge")
+        hints.append(f"If someone is complacent, go assertive to reset standards (Point Finger: '{challenge_statement}').")
     if PlayerReaction.LACKING_BELIEF in ctx.player_reactions:
-        hints.append("Low belief detected — supportive message to individuals can help ('You can do it.').")
+        encourage_statement = _get_individual_statement("Encourage")
+        hints.append(f"Low belief detected — supportive message to individuals can help ('{encourage_statement}').")
     # Discipline cautions
     if ctx.cards_yellow >= 3:
         hints.append("Warn booked defenders about tackles.")
@@ -41,5 +65,6 @@ def generate_nudges(ctx: Context) -> List[str]:
     if ctx.stage in (MatchStage.PRE_MATCH, MatchStage.HALF_TIME) and (
         ctx.score_state in (ScoreState.DRAWING, ScoreState.LOSING) or ctx.score_state is None
     ):
-        hints.append("Individual ST (composed): Pump Fists — 'You can make the difference.'")
+        encourage_statement = _get_individual_statement("Encourage")
+        hints.append(f"Individual ST (composed): Pump Fists — '{encourage_statement}'")
     return hints
