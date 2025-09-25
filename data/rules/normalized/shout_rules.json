@@ -1,0 +1,148 @@
+{
+  "context_rules": {
+    "score_state": {
+      "Winning": {
+        "early_game": ["Praise", "Focus", "None"],
+        "mid_game": ["Praise", "Focus", "Encourage"],
+        "late_game": ["Focus", "Praise", "None"]
+      },
+      "Drawing": {
+        "early_game": ["Encourage", "Focus", "None"],
+        "mid_game": ["Encourage", "Demand More", "Fire Up"],
+        "late_game": ["Fire Up", "Demand More", "Encourage"]
+      },
+      "Losing": {
+        "early_game": ["Encourage", "Focus", "None"],
+        "mid_game": ["Fire Up", "Demand More", "Encourage"],
+        "late_game": ["Fire Up", "Demand More", "Encourage"]
+      }
+    },
+    "momentum": {
+      "positive": {
+        "shouts": ["Praise", "Encourage", "Focus"],
+        "weight_modifier": 1.2
+      },
+      "neutral": {
+        "shouts": ["Focus", "Encourage", "None"],
+        "weight_modifier": 1.0
+      },
+      "negative": {
+        "shouts": ["Fire Up", "Demand More", "Encourage"],
+        "weight_modifier": 1.3
+      }
+    },
+    "favorite_status": {
+      "favorite": {
+        "winning": ["Focus", "Praise"],
+        "drawing": ["Demand More", "Fire Up"],
+        "losing": ["Fire Up", "Demand More"]
+      },
+      "underdog": {
+        "winning": ["Praise", "Encourage"],
+        "drawing": ["Encourage", "Focus"],
+        "losing": ["Encourage", "Fire Up"]
+      }
+    },
+    "venue": {
+      "home": {
+        "crowd_support": true,
+        "preferred_tones": ["assertive", "aggressive", "motivational"],
+        "boost_shouts": ["Fire Up", "Encourage"]
+      },
+      "away": {
+        "crowd_support": false,
+        "preferred_tones": ["calm", "relaxed", "motivational"],
+        "suppress_shouts": ["Fire Up"]
+      },
+      "neutral": {
+        "crowd_support": false,
+        "preferred_tones": ["calm", "assertive", "motivational"],
+        "boost_shouts": []
+      }
+    }
+  },
+  "suppression_rules": {
+    "cards": {
+      "yellow_cards_2_plus": {
+        "suppress": ["Fire Up", "Demand More"],
+        "prefer": ["Focus", "None"]
+      },
+      "red_card": {
+        "suppress": ["Fire Up", "Demand More"],
+        "prefer": ["Focus", "Encourage"]
+      }
+    },
+    "performance": {
+      "dominating": {
+        "suppress": ["Fire Up", "Demand More"],
+        "prefer": ["Praise", "Focus"]
+      },
+      "struggling": {
+        "suppress": ["Praise"],
+        "prefer": ["Encourage", "Fire Up"]
+      }
+    },
+    "time": {
+      "injury_time": {
+        "winning": {
+          "suppress": ["Fire Up", "Demand More"],
+          "prefer": ["Focus", "None"]
+        },
+        "losing": {
+          "suppress": ["None", "Focus"],
+          "prefer": ["Fire Up", "Encourage"]
+        }
+      }
+    }
+  },
+  "cooldown_rules": {
+    "same_shout": 8,
+    "similar_tone": 5,
+    "max_per_half": 6,
+    "praise_window": 3
+  },
+  "tone_selection": {
+    "league_position": {
+      "top_6": {
+        "expectation_modifier": 0.2,
+        "preferred_tones": ["assertive", "aggressive"]
+      },
+      "mid_table": {
+        "expectation_modifier": 0.0,
+        "preferred_tones": ["calm", "assertive", "motivational"]
+      },
+      "relegation_zone": {
+        "expectation_modifier": -0.2,
+        "preferred_tones": ["motivational", "calm"]
+      }
+    },
+    "recent_form": {
+      "good_form": {
+        "confidence_boost": 0.15,
+        "preferred_tones": ["assertive", "motivational"]
+      },
+      "poor_form": {
+        "confidence_boost": -0.15,
+        "preferred_tones": ["calm", "motivational", "relaxed"]
+      }
+    },
+    "match_importance": {
+      "cup_final": {
+        "intensity_modifier": 0.3,
+        "preferred_tones": ["motivational", "assertive"]
+      },
+      "derby": {
+        "intensity_modifier": 0.25,
+        "preferred_tones": ["aggressive", "motivational"]
+      },
+      "relegation_battle": {
+        "intensity_modifier": 0.2,
+        "preferred_tones": ["motivational", "aggressive"]
+      },
+      "routine": {
+        "intensity_modifier": 0.0,
+        "preferred_tones": ["calm", "assertive"]
+      }
+    }
+  }
+}

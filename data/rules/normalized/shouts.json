@@ -1,0 +1,54 @@
+{
+  "available_shouts": [
+    "Encourage",
+    "Demand More", 
+    "Focus",
+    "Fire Up",
+    "Praise",
+    "None"
+  ],
+  "shout_contexts": {
+    "Encourage": {
+      "description": "Boosts morale when team needs confidence",
+      "best_when": ["losing", "drawing", "low_confidence", "underdog"],
+      "avoid_when": ["dominating", "red_card_against_us"]
+    },
+    "Demand More": {
+      "description": "Pushes team to higher intensity and effort", 
+      "best_when": ["drawing_favorites", "poor_performance", "losing"],
+      "avoid_when": ["winning_comfortably", "multiple_yellows", "high_pressure"]
+    },
+    "Focus": {
+      "description": "Improves concentration and discipline",
+      "best_when": ["winning", "defensive_errors", "yellow_cards", "late_game"],
+      "avoid_when": ["need_goals_urgently"]
+    },
+    "Fire Up": {
+      "description": "Increases passion and intensity",
+      "best_when": ["big_match", "derby", "losing", "home_crowd"],
+      "avoid_when": ["away_hostile", "multiple_yellows", "winning_late"]
+    },
+    "Praise": {
+      "description": "Rewards good performance and builds confidence",
+      "best_when": ["good_performance", "young_players", "winning", "positive_momentum"],
+      "avoid_when": ["losing", "poor_performance", "need_urgency"]
+    },
+    "None": {
+      "description": "No shout - let players focus on the game",
+      "best_when": ["things_going_well", "players_concentrated", "avoiding_pressure"],
+      "avoid_when": ["crisis_moment", "need_motivation"]
+    }
+  },
+  "cooldown_rules": {
+    "same_shout_minutes": 8,
+    "max_shouts_per_half": 6,
+    "praise_window_after_positive": 3
+  },
+  "tone_mapping": {
+    "calm": ["Focus", "Praise", "None"],
+    "assertive": ["Demand More", "Focus", "Encourage"], 
+    "motivational": ["Encourage", "Fire Up", "Praise"],
+    "relaxed": ["None", "Praise", "Encourage"],
+    "aggressive": ["Fire Up", "Demand More"]
+  }
+}

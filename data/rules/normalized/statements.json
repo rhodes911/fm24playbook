@@ -53,26 +53,129 @@
   },
   "HalfTime": {
     "Winning": {
-      "No Gesture": [],
-      "Hands in pockets": [],
-      "Hands on hips": [],
-      "Hands together": [],
-      "Outstretched arms": [],
-      "Point finger": [],
-      "Pump fists": [],
-      "Throw water bottle": [],
-      "Thrust arms": []
+      "No Gesture": [
+        "I'm far from pleased with what I just saw from this team.",
+        "We haven't taken nearly enough shots and I'm disappointed with that.",
+        "We need more possession in the second half, I'm disappointed with what I've seen so far",
+        "Things are going well, but I know you're capable of even better",
+        "I'm happy with your performance so far, keep it up.",
+        "I'm delighted with your performance so far, keep it up.",
+        "Don't get complacent out there.",
+        "I know we are the underdogs here, but go on out there and give the fans a performance to cheer for!",
+        "You can go out there and play without pressure now."
+      ],
+      "Hands in pockets": [
+        "I'm far from pleased with what I just saw from this team.",
+        "We haven't taken nearly enough shots and I'm disappointed with that.",
+        "We need more possession in the second half, I'm disappointed with what I've seen so far",
+        "Things are going well, but I know you're capable of even better",
+        "I'm happy with your performance so far, keep it up.",
+        "I'm delighted with your performance so far, keep it up.",
+        "Don't get complacent out there.",
+        "I know we are the underdogs here, but go on out there and give the fans a performance to cheer for!",
+        "You can go out there and play without pressure now."
+      ],
+      "Hands on hips": [
+        "We haven't taken nearly enough shots and I'm disappointed with that.",
+        "We need more possession in the second half, I'm disappointed with what I've seen so far",
+        "Things are going well, but I know you're capable of even better",
+        "I'm happy with your performance so far, keep it up.",
+        "You can go out there and play without pressure now."
+      ],
+      "Hands together": [
+        "We haven't taken nearly enough shots and I'm disappointed with that.",
+        "We need more possession in the second half, I'm disappointed with what I've seen so far",
+        "Things are going well, but I know you're capable of even better",
+        "I'm happy with your performance so far, keep it up.",
+        "Don't get complacent out there.",
+        "You can go out there and play without pressure now."
+      ],
+      "Outstretched arms": [
+        "I'm happy with your performance so far, keep it up.",
+        "I'm delighted with your performance so far, keep it up.",
+        "You can go out there and play without pressure now."
+      ],
+      "Point finger": [
+        "We haven't taken nearly enough shots and I'm disappointed with that.",
+        "We need more possession in the second half, I'm disappointed with what I've seen so far",
+        "Things are going well, but I know you're capable of even better",
+        "I'm happy with your performance so far, keep it up.",
+        "I'm delighted with your performance so far, keep it up.",
+        "Don't get complacent out there.",
+        "I know we are the underdogs here, but go on out there and give the fans a performance to cheer for!",
+        "You can go out there and play without pressure now."
+      ],
+      "Pump fists": [
+        "Things are going well, but I know you're capable of even better",
+        "I know we are the underdogs here, but go on out there and give the fans a performance to cheer for!"
+      ],
+      "Throw water bottle": [
+        "I'm far from pleased with what I just saw from this team."
+      ],
+      "Thrust arms": [
+        "I'm far from pleased with what I just saw from this team."
+      ]
     },
     "Drawing": {
-      "No Gesture": [],
-      "Hands in pockets": [],
-      "Hands on hips": [],
-      "Hands together": [],
-      "Outstretched arms": [],
-      "Point finger": [],
-      "Pump fists": [],
-      "Throw water bottle": [],
-      "Thrust arms": []
+      "No Gesture": [
+        "Our shooting has not been good enough so far and that really needs to improve.",
+        "We need more possession in the second half, I'm disappointed with what I've seen so far",
+        "We've been the better team here, just keep doing what you've been doing and we'll be fine",
+        "You have been unlucky so far",
+        "I'm happy with your performance so far, keep it up.",
+        "I'm delighted with your performance so far, keep it up.",
+        "I know we are the underdogs here, but go on out there and give the fans a performance to cheer for!",
+        "You can go out there and play without pressure now."
+      ],
+      "Hands in pockets": [
+        "Our shooting has not been good enough so far and that really needs to improve.",
+        "We need more possession in the second half, I'm disappointed with what I've seen so far",
+        "We've been the better team here, just keep doing what you've been doing and we'll be fine",
+        "You have been unlucky so far",
+        "I'm happy with your performance so far, keep it up.",
+        "I'm delighted with your performance so far, keep it up.",
+        "I know we are the underdogs here, but go on out there and give the fans a performance to cheer for!",
+        "You can go out there and play without pressure now."
+      ],
+      "Hands on hips": [
+        "Our shooting has not been good enough so far and that really needs to improve.",
+        "We need more possession in the second half, I'm disappointed with what I've seen so far",
+        "We've been the better team here, just keep doing what you've been doing and we'll be fine",
+        "You have been unlucky so far",
+        "I'm happy with your performance so far, keep it up.",
+        "You can go out there and play without pressure now."
+      ],
+      "Hands together": [
+        "We need more possession in the second half, I'm disappointed with what I've seen so far",
+        "We've been the better team here, just keep doing what you've been doing and we'll be fine",
+        "You have been unlucky so far",
+        "I'm happy with your performance so far, keep it up.",
+        "You can go out there and play without pressure now."
+      ],
+      "Outstretched arms": [
+        "I'm happy with your performance so far, keep it up.",
+        "I'm delighted with your performance so far, keep it up.",
+        "You can go out there and play without pressure now."
+      ],
+      "Point finger": [
+        "We need more possession in the second half, I'm disappointed with what I've seen so far",
+        "We've been the better team here, just keep doing what you've been doing and we'll be fine",
+        "You have been unlucky so far",
+        "I'm happy with your performance so far, keep it up.",
+        "I'm delighted with your performance so far, keep it up.",
+        "I know we are the underdogs here, but go on out there and give the fans a performance to cheer for!",
+        "You can go out there and play without pressure now."
+      ],
+      "Pump fists": [
+        "We've been the better team here, just keep doing what you've been doing and we'll be fine",
+        "I know we are the underdogs here, but go on out there and give the fans a performance to cheer for!"
+      ],
+      "Throw water bottle": [
+        "I'm far from pleased with what I just saw from this team."
+      ],
+      "Thrust arms": [
+        "I'm far from pleased with what I just saw from this team."
+      ]
     },
     "Losing": {
       "No Gesture": [
@@ -226,15 +329,53 @@
       ]
     },
     "Drawing": {
-      "No Gesture": [],
-      "Hands in pockets": [],
-      "Hands on hips": [],
-      "Hands together": [],
-      "Outstretched arms": [],
-      "Point finger": [],
+      "No Gesture": [
+        "I expect to see you all in training tomorrow, you don't deserve a rest after that performance.",
+        "I am not happy with your performance out there.",
+        "You were unlucky today.",
+        "Well done lads, you've just proved a lot of people wrong in avoiding defeat out there",
+        "We didn't play as well as we can but I'm happy with the result.",
+        "Everybody thought we'd get beaten today, well done for proving them wrong. Great result!"
+      ],
+      "Hands in pockets": [
+        "I expect to see you all in training tomorrow, you don't deserve a rest after that performance.",
+        "I am not happy with your performance out there.",
+        "You were unlucky today.",
+        "Well done lads, you've just proved a lot of people wrong in avoiding defeat out there",
+        "We didn't play as well as we can but I'm happy with the result.",
+        "Everybody thought we'd get beaten today, well done for proving them wrong. Great result!"
+      ],
+      "Hands on hips": [
+        "I am not happy with your performance out there.",
+        "You were unlucky today.",
+        "Well done lads, you've just proved a lot of people wrong in avoiding defeat out there",
+        "We didn't play as well as we can but I'm happy with the result."
+      ],
+      "Hands together": [
+        "I am not happy with your performance out there.",
+        "You were unlucky today.",
+        "Well done lads, you've just proved a lot of people wrong in avoiding defeat out there",
+        "We didn't play as well as we can but I'm happy with the result."
+      ],
+      "Outstretched arms": [
+        "Well done lads, you've just proved a lot of people wrong in avoiding defeat out there",
+        "We didn't play as well as we can but I'm happy with the result.",
+        "Everybody thought we'd get beaten today, well done for proving them wrong. Great result!"
+      ],
+      "Point finger": [
+        "I am not happy with your performance out there.",
+        "You were unlucky today.",
+        "Well done lads, you've just proved a lot of people wrong in avoiding defeat out there",
+        "We didn't play as well as we can but I'm happy with the result.",
+        "Everybody thought we'd get beaten today, well done for proving them wrong. Great result!"
+      ],
       "Pump fists": [],
-      "Throw water bottle": [],
-      "Thrust arms": []
+      "Throw water bottle": [
+        "I expect to see you all in training tomorrow, you don't deserve a rest after that performance."
+      ],
+      "Thrust arms": [
+        "I expect to see you all in training tomorrow, you don't deserve a rest after that performance."
+      ]
     },
     "Losing": {
       "No Gesture": [

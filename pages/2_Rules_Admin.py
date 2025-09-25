@@ -27,6 +27,10 @@ norm_dir.mkdir(parents=True, exist_ok=True)
 catalogs_fp = norm_dir / "catalogs.json"
 statements_fp = norm_dir / "statements.json"
 gesture_statements_fp = norm_dir / "gesture_statements.json"
+shouts_fp = norm_dir / "shouts.json"
+shout_rules_fp = norm_dir / "shout_rules.json"
+shouts_fp = norm_dir / "shouts.json"
+shout_rules_fp = norm_dir / "shout_rules.json"
 
 def _load_json_or(default: dict, fp: Path) -> dict:
     try:
@@ -38,16 +42,32 @@ def _load_json_or(default: dict, fp: Path) -> dict:
 
 # Defaults seeded from gestures.json (tones inferred from keys) or a standard tone set
 default_catalogs = {
-    "tones": list(gestures_map.keys()) or ["calm", "assertive", "motivational", "relaxed", "angry"],
+    "tones": list(gestures_map.keys()) or ["calm", "assertive", "motivational", "relaxed", "aggressive"],
     "gestures": gestures_map or {
         "calm": [],
         "assertive": [],
         "motivational": [],
         "relaxed": [],
-        "angry": [],
+        "aggressive": [],
     },
 }
 catalogs = _load_json_or(default_catalogs, catalogs_fp)
+
+# Load shouts configuration
+default_shouts = {
+    "available_shouts": ["Encourage", "Demand More", "Focus", "Fire Up", "Praise", "None"],
+    "shout_contexts": {},
+    "cooldown_rules": {"same_shout_minutes": 8, "max_shouts_per_half": 6},
+    "tone_mapping": {}
+}
+shouts_config = _load_json_or(default_shouts, shouts_fp)
+
+default_shout_rules = {
+    "context_rules": {},
+    "suppression_rules": {},
+    "tone_selection": {}
+}
+shout_rules = _load_json_or(default_shout_rules, shout_rules_fp)
 
 default_statements = {
     "PreMatch": {tone: [] for tone in catalogs.get("tones", [])},
@@ -65,7 +85,7 @@ default_gesture_statements = {
 }
 gesture_statements = _load_json_or(default_gesture_statements, gesture_statements_fp)
 
-tab_g, tab_s = st.tabs(["Gestures", "Statements"])
+tab_g, tab_s, tab_sh = st.tabs(["Gestures", "Statements", "Shouts"])
 
 with tab_g:
     st.markdown("#### Gestures")
@@ -191,11 +211,176 @@ with tab_s:
         except Exception as e:
             st.error(f"Failed to save statements: {e}")
 
+with tab_sh:
+    st.markdown("#### Shouts (In-Play Touchline Commands)")
+    st.info("🎯 **Key Difference:** Shouts are for in-play match action, separate from team talk gestures/statements")
+    
+    # Shout Context Configuration
+    with st.expander("🎮 Shout Contexts & Effectiveness", expanded=True):
+        st.markdown("##### Configure when each shout works best")
+        
+        available_shouts = shouts_config.get("available_shouts", ["Encourage", "Demand More", "Focus", "Fire Up", "Praise", "None"])
+        
+        new_contexts = {}
+        for shout in available_shouts:
+            if shout == "None":
+                continue
+                
+            st.markdown(f"**{shout}**")
+            col1, col2 = st.columns(2)
+            
+            current_context = shouts_config.get("shout_contexts", {}).get(shout, {})
+            
+            with col1:
+                description = st.text_input(
+                    f"Description", 
+                    value=current_context.get("description", ""),
+                    key=f"shout_desc_{shout.replace(' ', '_')}",
+                    help=f"What does {shout} do?"
+                )
+                
+                best_when = st.text_area(
+                    f"Best when (one per line)",
+                    value="\n".join(current_context.get("best_when", [])),
+                    key=f"shout_best_{shout.replace(' ', '_')}",
+                    help=f"Contexts where {shout} works well"
+                )
+            
+            with col2:
+                avoid_when = st.text_area(
+                    f"Avoid when (one per line)",
+                    value="\n".join(current_context.get("avoid_when", [])),
+                    key=f"shout_avoid_{shout.replace(' ', '_')}",
+                    help=f"Contexts where {shout} should not be used"
+                )
+            
+            new_contexts[shout] = {
+                "description": description,
+                "best_when": [line.strip() for line in best_when.splitlines() if line.strip()],
+                "avoid_when": [line.strip() for line in avoid_when.splitlines() if line.strip()]
+            }
+    
+    # Tone Mapping for Shouts
+    with st.expander("🎭 Tone → Shout Mapping", expanded=False):
+        st.markdown("##### Which shouts work with each tone")
+        st.caption("Select which shouts are compatible with each tone. This determines shout selection during matches.")
+        
+        tones_list = catalogs.get("tones", [])
+        new_tone_mapping = {}
+        
+        for tone in tones_list:
+            current_mapping = shouts_config.get("tone_mapping", {}).get(tone, [])
+            selected_shouts = st.multiselect(
+                f"{tone.title()} tone → Available shouts",
+                options=available_shouts,
+                default=current_mapping,
+                key=f"tone_map_{tone}",
+                help=f"Which shouts work well with {tone} tone?"
+            )
+            new_tone_mapping[tone] = selected_shouts
+    
+    # Cooldown Rules
+    with st.expander("⏰ Cooldown & Usage Rules", expanded=False):
+        st.markdown("##### Prevent shout overuse")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        current_cooldowns = shouts_config.get("cooldown_rules", {})
+        
+        with col1:
+            same_shout = st.number_input(
+                "Same shout cooldown (minutes)",
+                min_value=1, max_value=20,
+                value=current_cooldowns.get("same_shout_minutes", 8),
+                help="Minimum time before repeating the same shout"
+            )
+        
+        with col2:
+            max_per_half = st.number_input(
+                "Max shouts per half",
+                min_value=1, max_value=15, 
+                value=current_cooldowns.get("max_shouts_per_half", 6),
+                help="Maximum number of shouts allowed per half"
+            )
+        
+        with col3:
+            praise_window = st.number_input(
+                "Praise window (minutes)",
+                min_value=1, max_value=10,
+                value=current_cooldowns.get("praise_window_after_positive", 3),
+                help="Time window to praise after positive events"
+            )
+    
+    # Suppression Rules
+    with st.expander("🚫 Suppression Rules (Safety)", expanded=False):
+        st.markdown("##### Automatic restrictions based on match state")
+        
+        st.markdown("**Yellow Cards Suppression**")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            cards_threshold = st.number_input(
+                "Yellow cards threshold",
+                min_value=1, max_value=5,
+                value=2,
+                help="Suppress aggressive shouts when this many yellows"
+            )
+        
+        with col2:
+            suppressed_shouts = st.multiselect(
+                "Suppress these shouts",
+                options=["Fire Up", "Demand More"],
+                default=["Fire Up", "Demand More"],
+                help="Which shouts to suppress when too many yellows"
+            )
+        
+        st.markdown("**Time-based Suppression**")
+        late_game_suppress = st.multiselect(
+            "Late game suppression (when winning)",
+            options=["Fire Up", "Demand More"],
+            default=["Fire Up"],
+            help="Suppress these shouts when winning in final 15 minutes"
+        )
+    
+    # Save Button for Shouts
+    if st.button("💾 Save Shout Configuration", key="save_shouts"):
+        try:
+            # Update shouts config
+            new_shouts_config = {
+                "available_shouts": available_shouts,
+                "shout_contexts": new_contexts,
+                "cooldown_rules": {
+                    "same_shout_minutes": same_shout,
+                    "max_shouts_per_half": max_per_half,
+                    "praise_window_after_positive": praise_window
+                },
+                "tone_mapping": new_tone_mapping
+            }
+            
+            # Update suppression rules
+            new_suppression_rules = {
+                "cards": {
+                    "yellow_cards_threshold": cards_threshold,
+                    "suppressed_shouts": suppressed_shouts
+                },
+                "time": {
+                    "late_game_winning": late_game_suppress
+                }
+            }
+            
+            # Save both files
+            shouts_fp.write_text(json.dumps(new_shouts_config, indent=2, ensure_ascii=False), encoding="utf-8")
+            
+            current_shout_rules = shout_rules.copy()
+            current_shout_rules["suppression_rules"] = new_suppression_rules
+            shout_rules_fp.write_text(json.dumps(current_shout_rules, indent=2, ensure_ascii=False), encoding="utf-8")
+            
+            st.success("Shout configuration saved!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Failed to save shout configuration: {e}")
 
-
-st.divider()
-
-# Import/Export Section
+st.divider()# Import/Export Section
 col1, col2 = st.columns(2)
 
 with col1:
@@ -234,6 +419,28 @@ with col1:
                 st.rerun()
             except Exception as e:
                 st.error(f"Failed to import links: {e}")
+        
+        # Import Shouts
+        uploaded_shouts = st.file_uploader("Import Shouts Config (shouts.json)", type="json", key="import_shouts")
+        if uploaded_shouts and st.button("Import Shouts", key="btn_import_shouts"):
+            try:
+                imported_data = json.loads(uploaded_shouts.read().decode('utf-8'))
+                shouts_fp.write_text(json.dumps(imported_data, indent=2, ensure_ascii=False), encoding="utf-8")
+                st.success("Shouts configuration imported successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to import shouts: {e}")
+        
+        # Import Shout Rules
+        uploaded_shout_rules = st.file_uploader("Import Shout Rules (shout_rules.json)", type="json", key="import_shout_rules")
+        if uploaded_shout_rules and st.button("Import Shout Rules", key="btn_import_shout_rules"):
+            try:
+                imported_data = json.loads(uploaded_shout_rules.read().decode('utf-8'))
+                shout_rules_fp.write_text(json.dumps(imported_data, indent=2, ensure_ascii=False), encoding="utf-8")
+                st.success("Shout rules imported successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to import shout rules: {e}")
 
 with col2:
     with st.expander("📤 Export JSON Files", expanded=False):
@@ -271,12 +478,34 @@ with col2:
             )
         except Exception:
             st.info("No gesture_statements.json yet - configure links first")
+        
+        try:
+            st.download_button(
+                "🎮 Download Shouts (shouts.json)", 
+                data=shouts_fp.read_text(encoding="utf-8"), 
+                file_name="shouts.json", 
+                mime="application/json",
+                help="Contains shout contexts, cooldowns and tone mapping"
+            )
+        except Exception:
+            st.info("No shouts.json yet - configure shouts first")
+        
+        try:
+            st.download_button(
+                "⚙️ Download Shout Rules (shout_rules.json)", 
+                data=shout_rules_fp.read_text(encoding="utf-8"), 
+                file_name="shout_rules.json", 
+                mime="application/json",
+                help="Contains shout selection and suppression rules"
+            )
+        except Exception:
+            st.info("No shout_rules.json yet - configure shout rules first")
 
 # JSON Preview Section
 with st.expander("👀 Preview Current JSON Structure", expanded=False):
     st.info("🔍 **Preview:** See the current JSON structure of your data before exporting.")
     
-    preview_tab1, preview_tab2, preview_tab3 = st.tabs(["Gestures/Tones", "Statements", "Links"])
+    preview_tab1, preview_tab2, preview_tab3, preview_tab4, preview_tab5 = st.tabs(["Gestures/Tones", "Statements", "Links", "Shouts", "Shout Rules"])
     
     with preview_tab1:
         st.json(catalogs, expanded=False)
@@ -286,4 +515,10 @@ with st.expander("👀 Preview Current JSON Structure", expanded=False):
     
     with preview_tab3:
         st.json(gesture_statements, expanded=False)
+    
+    with preview_tab4:
+        st.json(shouts_config, expanded=False)
+    
+    with preview_tab5:
+        st.json(shout_rules, expanded=False)
     
