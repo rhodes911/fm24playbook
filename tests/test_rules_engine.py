@@ -66,3 +66,28 @@ def test_favourite_detection_away_is_stricter():
     )
     fav, _ = detect_fav_status(ctx)
     assert fav == FavStatus.UNDERDOG
+
+
+def test_halftime_losing_favourite_away_tone_and_gesture():
+    # Away favourite losing at HT should be firm but constructive (Point Finger)
+    ctx = Context(
+        stage=MatchStage.HALF_TIME,
+        fav_status=FavStatus.FAVOURITE,
+        venue=Venue.AWAY,
+        score_state=ScoreState.LOSING,
+        ht_score_delta=-1,
+    )
+    rec = recommend(ctx)
+    assert rec is not None
+    assert rec.gesture in ("Point Finger", "Thrash Arms")  # thrash if -2 or worse per engine
+    assert rec.shout == Shout.NONE
+
+
+def test_halftime_drawing_favourite_vs_underdog_tier_aware_is_stable():
+    # These should remain consistent with base rules even as tiers are considered
+    ctx_fav = Context(stage=MatchStage.HALF_TIME, fav_status=FavStatus.FAVOURITE, venue=Venue.HOME, score_state=ScoreState.DRAWING)
+    ctx_dog = Context(stage=MatchStage.HALF_TIME, fav_status=FavStatus.UNDERDOG, venue=Venue.AWAY, score_state=ScoreState.DRAWING)
+    rec_f = recommend(ctx_fav)
+    rec_d = recommend(ctx_dog)
+    assert rec_f is not None and rec_d is not None
+    assert rec_f.shout == Shout.NONE and rec_d.shout == Shout.NONE

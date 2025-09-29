@@ -1,0 +1,31 @@
+{
+  "id": "74f75ca5",
+  "started_at": "2025-09-25T18:31:57.330579+00:00",
+  "status": "active",
+  "name": "TEST",
+  "context": {
+    "stage": "PreMatch",
+    "fav_status": "Underdog",
+    "venue": "Home",
+    "score_state": null,
+    "special_situations": [],
+    "player_reactions": [],
+    "minute": 0,
+    "possession_pct": null,
+    "shots_for": null,
+    "shots_against": null,
+    "shots_on_target_for": null,
+    "shots_on_target_against": null,
+    "xg_for": null,
+    "xg_against": null,
+    "team_position": 10,
+    "opponent_position": 1,
+    "team_form": "WLWLW",
+    "opponent_form": "WWWWW",
+    "team_goals": null,
+    "opponent_goals": null,
+    "auto_fav_status": true,
+    "preferred_talk_audience": null
+  },
+  "events": []
+}

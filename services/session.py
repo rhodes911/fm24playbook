@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -102,7 +102,7 @@ class SessionManager:
             raise ValueError("Session name is required.")
         session = {
             "id": str(uuid.uuid4())[:8],
-            "started_at": datetime.utcnow().isoformat() + "Z",
+            "started_at": datetime.now(timezone.utc).isoformat(),
             "status": "active",
             "name": name.strip(),
             "context": serialize_context(context),
@@ -115,7 +115,7 @@ class SessionManager:
         if not ACTIVE_FILE.exists():
             raise RuntimeError("No active session to log event.")
         session = json.loads(ACTIVE_FILE.read_text(encoding="utf-8"))
-        event["ts"] = datetime.utcnow().isoformat() + "Z"
+        event["ts"] = datetime.now(timezone.utc).isoformat()
         session["events"].append(event)
         ACTIVE_FILE.write_text(json.dumps(session, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -134,7 +134,7 @@ class SessionManager:
         if not ACTIVE_FILE.exists():
             raise RuntimeError("No active session to complete.")
         session = json.loads(ACTIVE_FILE.read_text(encoding="utf-8"))
-        session["completed_at"] = datetime.utcnow().isoformat() + "Z"
+        session["completed_at"] = datetime.now(timezone.utc).isoformat()
         session["status"] = "completed"
         session["outcome"] = outcome
         session["notes"] = notes

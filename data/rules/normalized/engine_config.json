@@ -29,5 +29,21 @@
       "slight_dog": -0.8,
       "strong_dog": -2.5
     }
+  },
+  "ml_assist": {
+    "log_features": false,
+    "path": "data/logs/ml/features.csv",
+    "inference_enabled": false,
+    "model_dir": "data/ml",
+    "weight": 0.25,
+    "stages": {
+      "PreMatch": false,
+      "HalfTime": true,
+      "FullTime": false,
+      "Early": true,
+      "Mid": true,
+      "Late": true,
+      "VeryLate": true
+    }
   }
 }

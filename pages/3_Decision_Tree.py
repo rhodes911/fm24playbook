@@ -372,6 +372,10 @@ if view == "Simulator":
                     unsafe_allow_html=True,
                 )
                 st.markdown(f"<div class='muted'>Talk: {html.escape(rec.team_talk or '(auto)')}</div>", unsafe_allow_html=True)
+                # Show verbose engine trace for transparency
+                if getattr(rec, "trace", None):
+                    with st.expander("Trace"):
+                        st.code("\n".join([str(t) for t in rec.trace[:200]]), language="text")
                 if getattr(rec, "notes", None):
                     with st.expander("Why this"):
                         for n in rec.notes[:10]:

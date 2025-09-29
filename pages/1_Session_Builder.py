@@ -12,7 +12,7 @@ from domain.models import (
     SpecialSituation,
     TalkAudience,
 )
-from domain.rules_engine import recommend, detect_fav_status
+from domain.rules_engine import recommend, detect_fav_status, detect_matchup_tier
 from services.session import SessionManager
 
 
@@ -297,6 +297,16 @@ with tabs[0]:
         sign = "+" if adv >= 0 else ""
         adv_html = f"<span class='chip badge'>Rank advantage: {sign}{adv}</span>"
 
+    # Tier/Edge chips from advantage model
+    tier_html = ""
+    try:
+        _tier, _edge, _expl = detect_matchup_tier(tmp_ctx)
+        if _tier:
+            edge_str = f"{_edge:+.2f}" if _edge is not None else "?"
+            tier_html = f"<span class='chip badge'>Tier: {_tier.value} • Edge {edge_str}</span>"
+    except Exception:
+        pass
+
     # Specials chips
     spec_html = ""
     if tmp_ctx.special_situations:
@@ -323,6 +333,7 @@ with tabs[0]:
             <div class='pm-title'>vs <strong>{opponent or '—'}</strong> • {venue_sel}</div>
                         <span class='chip badge'>Status: {(derived_status.value if (auto_fav and derived_status) else fav_sel)}{' (auto)' if auto_fav else ''}</span>
             {adv_html}
+            {tier_html}
             {aud_html}
           </div>
           <div class='spacer'></div>
@@ -361,9 +372,19 @@ with tabs[0]:
                     with st.expander("Why this"):
                         for n in pre_rec.notes[:6]:
                             st.write(f"- {n}")
+                if getattr(pre_rec, "trace", None):
+                    with st.expander("Trace"):
+                        for t in pre_rec.trace:
+                            st.write(f"- {t}")
                 if st.button("Lock Pre-Match", key="lock_pm"):
                     # Persist the current inputs into the active session's context
                     sm.update_context(base_ctx)
+                    # Derive tier/edge and include trace in the event
+                    _tier, _edge, _expl = None, None, None
+                    try:
+                        _tier, _edge, _expl = detect_matchup_tier(base_ctx)
+                    except Exception:
+                        pass
                     sm.append_event({
                         "type": "decision",
                         "minute": 0,
@@ -373,6 +394,12 @@ with tabs[0]:
                             "gesture": pre_rec.gesture,
                             "phrase": pre_rec.team_talk,
                             "shout": Shout.NONE.value,
+                            "fav_status": base_ctx.fav_status.value,
+                            "auto_fav_status": bool(base_ctx.auto_fav_status),
+                            "tier": (_tier.value if _tier else None),
+                            "edge": _edge,
+                            "tier_explain": _expl,
+                            "trace": getattr(pre_rec, "trace", []),
                         }
                     })
                     st.rerun()
@@ -472,11 +499,28 @@ with tabs[1]:
                     with st.expander("Why this"):
                         for n in rec.notes[:6]:
                             st.write(f"- {n}")
+                if getattr(rec, "trace", None):
+                    with st.expander("Trace"):
+                        for t in rec.trace:
+                            st.write(f"- {t}")
                 if st.button("Add Shout (FH)"):
+                    _tier, _edge, _expl = None, None, None
+                    try:
+                        _tier, _edge, _expl = detect_matchup_tier(live_ctx)
+                    except Exception:
+                        pass
                     sm.append_event({
                         "type": "shout",
                         "minute": int(latest_snap.get("minute", 0)),
-                        "payload": {"kind": rec.shout.value if isinstance(rec.shout, Shout) else str(rec.shout)}
+                        "payload": {
+                            "kind": rec.shout.value if isinstance(rec.shout, Shout) else str(rec.shout),
+                            "fav_status": live_ctx.fav_status.value,
+                            "auto_fav_status": bool(live_ctx.auto_fav_status),
+                            "tier": (_tier.value if _tier else None),
+                            "edge": _edge,
+                            "tier_explain": _expl,
+                            "trace": getattr(rec, "trace", []),
+                        }
                     })
                     st.rerun()
 
@@ -555,6 +599,13 @@ with tabs[2]:
                 ht_ctx = context_from_snapshot(base_ctx, ht_snap, MatchStage.HALF_TIME)
                 ht_rec = recommend(ht_ctx)
                 if ht_rec:
+                    # Show Tier/Edge for transparency
+                    try:
+                        _tier, _edge, _expl = detect_matchup_tier(ht_ctx)
+                        if _tier:
+                            st.caption(f"Tier: {_tier.value} • Edge {_edge:+.2f}")
+                    except Exception:
+                        pass
                     st.write(f"Gesture: {ht_rec.gesture} • Shout: {ht_rec.shout.value if isinstance(ht_rec.shout, Shout) else ht_rec.shout}")
                     if ht_rec.team_talk:
                         st.write(f"Talk: {ht_rec.team_talk}")
@@ -563,6 +614,10 @@ with tabs[2]:
                         with st.expander("Why this"):
                             for n in ht_rec.notes[:6]:
                                 st.write(f"- {n}")
+                    if getattr(ht_rec, "trace", None):
+                        with st.expander("Trace"):
+                            for t in ht_rec.trace:
+                                st.write(f"- {t}")
                     # Optional: Edit/Log a Half-Time snapshot even if one exists
                     with st.expander("Add or Update Half-Time Snapshot (45')", expanded=False):
                         # Prefill from the existing HT snapshot payload; fallback to latest FH snapshot
@@ -624,6 +679,11 @@ with tabs[2]:
                             st.success("Half-Time snapshot saved (45')")
                             st.rerun()
                     if st.button("Lock Half-Time", key="lock_ht"):
+                        _tier, _edge, _expl = None, None, None
+                        try:
+                            _tier, _edge, _expl = detect_matchup_tier(ht_ctx)
+                        except Exception:
+                            pass
                         sm.append_event({
                             "type": "decision",
                             "minute": 45,
@@ -633,6 +693,12 @@ with tabs[2]:
                                 "gesture": ht_rec.gesture,
                                 "phrase": ht_rec.team_talk,
                                 "shout": Shout.NONE.value,
+                                "fav_status": ht_ctx.fav_status.value,
+                                "auto_fav_status": bool(ht_ctx.auto_fav_status),
+                                "tier": (_tier.value if _tier else None),
+                                "edge": _edge,
+                                "tier_explain": _expl,
+                                "trace": getattr(ht_rec, "trace", []),
                             }
                         })
                         st.rerun()
@@ -733,11 +799,28 @@ with tabs[3]:
                     with st.expander("Why this"):
                         for n in rec.notes[:6]:
                             st.write(f"- {n}")
+                if getattr(rec, "trace", None):
+                    with st.expander("Trace"):
+                        for t in rec.trace:
+                            st.write(f"- {t}")
                 if st.button("Add Shout (SH)"):
+                    _tier, _edge, _expl = None, None, None
+                    try:
+                        _tier, _edge, _expl = detect_matchup_tier(live_ctx)
+                    except Exception:
+                        pass
                     sm.append_event({
                         "type": "shout",
                         "minute": int(latest_snap2.get("minute", 0)),
-                        "payload": {"kind": rec.shout.value if isinstance(rec.shout, Shout) else str(rec.shout)}
+                        "payload": {
+                            "kind": rec.shout.value if isinstance(rec.shout, Shout) else str(rec.shout),
+                            "fav_status": live_ctx.fav_status.value,
+                            "auto_fav_status": bool(live_ctx.auto_fav_status),
+                            "tier": (_tier.value if _tier else None),
+                            "edge": _edge,
+                            "tier_explain": _expl,
+                            "trace": getattr(rec, "trace", []),
+                        }
                     })
                     st.rerun()
 
@@ -817,6 +900,13 @@ with tabs[4]:
                 ft_ctx = context_from_snapshot(base_ctx, ft_snap, MatchStage.FULL_TIME)
                 ft_rec = recommend(ft_ctx)
                 if ft_rec:
+                    # Show Tier/Edge for transparency
+                    try:
+                        _tier, _edge, _expl = detect_matchup_tier(ft_ctx)
+                        if _tier:
+                            st.caption(f"Tier: {_tier.value} • Edge {_edge:+.2f}")
+                    except Exception:
+                        pass
                     st.write(f"Gesture: {ft_rec.gesture} • Shout: {ft_rec.shout.value if isinstance(ft_rec.shout, Shout) else ft_rec.shout}")
                     if ft_rec.team_talk:
                         st.write(f"Talk: {ft_rec.team_talk}")
@@ -825,7 +915,16 @@ with tabs[4]:
                         with st.expander("Why this"):
                             for n in ft_rec.notes[:6]:
                                 st.write(f"- {n}")
+                    if getattr(ft_rec, "trace", None):
+                        with st.expander("Trace"):
+                            for t in ft_rec.trace:
+                                st.write(f"- {t}")
                     if st.button("Lock Full-Time", key="lock_ft"):
+                        _tier, _edge, _expl = None, None, None
+                        try:
+                            _tier, _edge, _expl = detect_matchup_tier(ft_ctx)
+                        except Exception:
+                            pass
                         sm.append_event({
                             "type": "decision",
                             "minute": int(ft_snap.get("minute", 90)),
@@ -835,6 +934,12 @@ with tabs[4]:
                                 "gesture": ft_rec.gesture,
                                 "phrase": ft_rec.team_talk,
                                 "shout": Shout.NONE.value,
+                                "fav_status": ft_ctx.fav_status.value,
+                                "auto_fav_status": bool(ft_ctx.auto_fav_status),
+                                "tier": (_tier.value if _tier else None),
+                                "edge": _edge,
+                                "tier_explain": _expl,
+                                "trace": getattr(ft_rec, "trace", []),
                             }
                         })
                         st.rerun()

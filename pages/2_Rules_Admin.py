@@ -4,8 +4,10 @@ from pathlib import Path
 
 from services.repository import Repository
 from domain.models import (
-    MatchStage, ScoreState,
+    MatchStage, ScoreState, FavStatus, Venue, Context
 )
+from domain.rules_engine import detect_fav_status, detect_matchup_tier, recommend
+from domain.ml_assist import load_model, extract_features, to_vector_row, predict_proba
 
 st.title("🧱 Rules Admin — Minimal Tables")
 st.caption("Only the three granular tables: Gestures, Statements, and Gesture↔Statements links.")
@@ -85,7 +87,7 @@ default_gesture_statements = {
 }
 gesture_statements = _load_json_or(default_gesture_statements, gesture_statements_fp)
 
-tab_g, tab_s, tab_sh = st.tabs(["Gestures", "Statements", "Shouts"])
+tab_g, tab_s, tab_sh, tab_cfg = st.tabs(["Gestures", "Statements", "Shouts", "Engine Config"])
 
 with tab_g:
     st.markdown("#### Gestures")
@@ -409,6 +411,311 @@ with tab_sh:
             st.rerun()
         except Exception as e:
             st.error(f"Failed to save shout configuration: {e}")
+
+with tab_cfg:
+    st.markdown("#### Engine Scoring & Detection")
+    st.caption("Tune favourite detection and the tiered advantage model. Changes save to engine_config.json.")
+    cfg_fp = norm_dir / "engine_config.json"
+    try:
+        cfg = json.loads(cfg_fp.read_text(encoding="utf-8")) if cfg_fp.exists() else {}
+    except Exception:
+        cfg = {}
+    fav_cfg = cfg.get("favourite_detection", {})
+    adv_cfg = cfg.get("advantage_model", {})
+    ml_cfg = cfg.get("ml_assist", {})
+
+    # Small model status badge
+    try:
+        _mod_dir = Path(ml_cfg.get("model_dir", "data/ml"))
+        _g_ok = (_mod_dir / "gesture.joblib").exists()
+        _s_ok = (_mod_dir / "shout.joblib").exists()
+        badge = f"Models: gesture {'✅' if _g_ok else '❌'}, shout {'✅' if _s_ok else '❌'} (dir: {_mod_dir})"
+        st.caption(badge)
+    except Exception:
+        pass
+
+    edit_cfg = st.checkbox("Enable editing (advanced)", value=False, key="edit_cfg")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("**Favourite detection**")
+        pos_gap_threshold = st.number_input("Position gap threshold", 1, 12, int(fav_cfg.get("pos_gap_threshold", 3)), disabled=not edit_cfg)
+        pos_weight = st.number_input("Position weight", 0, 5, int(fav_cfg.get("pos_weight", 1)), disabled=not edit_cfg)
+        form_diff_threshold = st.number_input("Form diff threshold", 0, 10, int(fav_cfg.get("form_diff_threshold", 2)), disabled=not edit_cfg)
+        form_weight = st.number_input("Form weight", 0, 5, int(fav_cfg.get("form_weight", 1)), disabled=not edit_cfg)
+        home_bonus = st.number_input("Home bonus", 0, 5, int(fav_cfg.get("home_bonus", 1)), disabled=not edit_cfg)
+        away_penalty = st.number_input("Away penalty", 0, 5, int(fav_cfg.get("away_penalty", 1)), disabled=not edit_cfg)
+        favourite_threshold = st.number_input("Favourite score threshold", -10, 10, int(fav_cfg.get("favourite_threshold", 2)), disabled=not edit_cfg)
+        st.markdown("Special away rules")
+        specials = fav_cfg.get("special_rules", {}) or {}
+        require_both = st.checkbox("Require BOTH pos and form to be favourite away", value=bool(specials.get("require_both_pos_and_form_to_be_favourite_away", False)), disabled=not edit_cfg)
+        never_fav_away_ge = st.number_input("Never favourite away if worse by ≥", 0, 12, int(specials.get("never_favourite_away_if_pos_gap_disadvantage_ge", 0)), disabled=not edit_cfg)
+    with col_b:
+        st.markdown("**Advantage model (tiering)**")
+        pos_w = st.number_input("pos_weight", 0.0, 5.0, float(adv_cfg.get("pos_weight", 1.0)), 0.1, disabled=not edit_cfg)
+        form_w = st.number_input("form_weight", 0.0, 5.0, float(adv_cfg.get("form_weight", 0.8)), 0.1, disabled=not edit_cfg)
+        home_w = st.number_input("venue_home", -2.0, 2.0, float(adv_cfg.get("venue_home", 0.6)), 0.1, disabled=not edit_cfg)
+        away_w = st.number_input("venue_away", -2.0, 2.0, float(adv_cfg.get("venue_away", -0.6)), 0.1, disabled=not edit_cfg)
+        xg_w = st.number_input("xg_weight", 0.0, 5.0, float(adv_cfg.get("xg_weight", 0.8)), 0.1, disabled=not edit_cfg)
+        shots_w = st.number_input("shots_weight", 0.0, 5.0, float(adv_cfg.get("shots_weight", 0.4)), 0.1, disabled=not edit_cfg)
+        poss_w = st.number_input("possession_weight", 0.0, 5.0, float(adv_cfg.get("possession_weight", 0.3)), 0.1, disabled=not edit_cfg)
+        cap = st.number_input("cap", 0.0, 20.0, float(adv_cfg.get("cap", 5.0)), 0.5, disabled=not edit_cfg)
+        tiers = adv_cfg.get("tiers", {}) or {}
+        st.markdown("Thresholds → tiers")
+        strong_fav = st.number_input("strong_fav (≥)", -10.0, 10.0, float(tiers.get("strong_fav", 2.5)), 0.1, disabled=not edit_cfg)
+        slight_fav = st.number_input("slight_fav (≥)", -10.0, 10.0, float(tiers.get("slight_fav", 0.8)), 0.1, disabled=not edit_cfg)
+        even_hi = st.number_input("even_hi (<)", -10.0, 10.0, float(tiers.get("even_hi", 0.8)), 0.1, disabled=not edit_cfg)
+        even_lo = st.number_input("even_lo (>)", -10.0, 10.0, float(tiers.get("even_lo", -0.8)), 0.1, disabled=not edit_cfg)
+        slight_dog = st.number_input("slight_dog (≤)", -10.0, 10.0, float(tiers.get("slight_dog", -0.8)), 0.1, disabled=not edit_cfg)
+        strong_dog = st.number_input("strong_dog (≤)", -10.0, 10.0, float(tiers.get("strong_dog", -2.5)), 0.1, disabled=not edit_cfg)
+
+    st.markdown("**ML assist (logging + inference)**")
+    col_ml1, col_ml2 = st.columns([1,3])
+    with col_ml1:
+        ml_log = st.checkbox("Log features for offline ML", value=bool(ml_cfg.get("log_features", False)), disabled=not edit_cfg)
+    with col_ml2:
+        ml_path = st.text_input("CSV path", value=str(ml_cfg.get("path", "data/logs/ml/features.csv")), disabled=not edit_cfg, help="Relative to project root")
+    col_ml3, col_ml4, col_ml5 = st.columns([1,2,1])
+    with col_ml3:
+        ml_inf = st.checkbox("Enable inference (re-rank)", value=bool(ml_cfg.get("inference_enabled", False)), disabled=not edit_cfg)
+    with col_ml4:
+        ml_model_dir = st.text_input("Model directory", value=str(ml_cfg.get("model_dir", "data/ml")), disabled=not edit_cfg)
+    with col_ml5:
+        ml_weight = st.number_input("Weight", 0.0, 1.0, float(ml_cfg.get("weight", 0.25)), 0.05, disabled=not edit_cfg, help="Higher = stronger application of ML suggestion")
+
+    # Per-stage toggles
+    st.caption("Per-stage inference (use sparingly on talk stages)")
+    stages_cfg = ml_cfg.get("stages", {}) or {}
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        stg_pm = st.checkbox("PreMatch", value=bool(stages_cfg.get("PreMatch", False)), disabled=not edit_cfg)
+    with c2:
+        stg_ht = st.checkbox("HalfTime", value=bool(stages_cfg.get("HalfTime", True)), disabled=not edit_cfg)
+    with c3:
+        stg_ft = st.checkbox("FullTime", value=bool(stages_cfg.get("FullTime", False)), disabled=not edit_cfg)
+    with c4:
+        stg_el = st.checkbox("Early", value=bool(stages_cfg.get("Early", True)), disabled=not edit_cfg)
+    c5, c6, c7 = st.columns(3)
+    with c5:
+        stg_md = st.checkbox("Mid", value=bool(stages_cfg.get("Mid", True)), disabled=not edit_cfg)
+    with c6:
+        stg_lt = st.checkbox("Late", value=bool(stages_cfg.get("Late", True)), disabled=not edit_cfg)
+    with c7:
+        stg_vl = st.checkbox("VeryLate", value=bool(stages_cfg.get("VeryLate", True)), disabled=not edit_cfg)
+
+    if st.button("💾 Save Engine Config", disabled=not edit_cfg):
+        try:
+            cfg_new = {
+                "favourite_detection": {
+                    "pos_gap_threshold": int(pos_gap_threshold),
+                    "pos_weight": int(pos_weight),
+                    "form_diff_threshold": int(form_diff_threshold),
+                    "form_weight": int(form_weight),
+                    "home_bonus": int(home_bonus),
+                    "away_penalty": int(away_penalty),
+                    "favourite_threshold": int(favourite_threshold),
+                    "special_rules": {
+                        "require_both_pos_and_form_to_be_favourite_away": bool(require_both),
+                        "never_favourite_away_if_pos_gap_disadvantage_ge": int(never_fav_away_ge)
+                    }
+                },
+                "advantage_model": {
+                    "pos_weight": float(pos_w),
+                    "form_weight": float(form_w),
+                    "venue_home": float(home_w),
+                    "venue_away": float(away_w),
+                    "xg_weight": float(xg_w),
+                    "shots_weight": float(shots_w),
+                    "possession_weight": float(poss_w),
+                    "cap": float(cap),
+                    "tiers": {
+                        "strong_fav": float(strong_fav),
+                        "slight_fav": float(slight_fav),
+                        "even_hi": float(even_hi),
+                        "even_lo": float(even_lo),
+                        "slight_dog": float(slight_dog),
+                        "strong_dog": float(strong_dog)
+                    }
+                },
+                "ml_assist": {
+                    "log_features": bool(ml_log),
+                    "path": ml_path or "data/logs/ml/features.csv",
+                    "inference_enabled": bool(ml_inf),
+                    "model_dir": ml_model_dir or "data/ml",
+                    "weight": float(ml_weight),
+                    "stages": {
+                        "PreMatch": bool(stg_pm),
+                        "HalfTime": bool(stg_ht),
+                        "FullTime": bool(stg_ft),
+                        "Early": bool(stg_el),
+                        "Mid": bool(stg_md),
+                        "Late": bool(stg_lt),
+                        "VeryLate": bool(stg_vl),
+                    },
+                }
+            }
+            cfg_fp.write_text(json.dumps(cfg_new, indent=2, ensure_ascii=False), encoding="utf-8")
+            st.success("Engine config saved")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Failed to save engine config: {e}")
+
+    st.markdown("---")
+    with st.expander("🤖 ML Model Status & Quick Validation", expanded=False):
+        mod_dir = Path(ml_cfg.get("model_dir", "data/ml"))
+        g_ok = (mod_dir / "gesture.joblib").exists()
+        s_ok = (mod_dir / "shout.joblib").exists()
+        st.write({"gesture_model": g_ok, "shout_model": s_ok, "dir": str(mod_dir)})
+
+        pc1, pc2, pc3 = st.columns(3)
+        with pc1:
+            vv = st.selectbox("Venue", ["Home","Away"], index=0, key="mlv")
+            stg = st.selectbox("Stage", [s.value for s in MatchStage], index=0, key="mls")
+        with pc2:
+            fav_auto = st.checkbox("Auto fav", value=True, key="mlauto")
+            fav_sel = st.selectbox("If manual: status", [f.value for f in FavStatus], index=0, disabled=fav_auto, key="mlfav")
+        with pc3:
+            sc = st.selectbox("Score", [s.value for s in ScoreState], index=1, key="mlsc")
+        tpos, opos = st.columns(2)
+        with tpos:
+            tp = st.number_input("Your pos", 1, 24, 7, key="mltp")
+        with opos:
+            op = st.number_input("Opp pos", 1, 24, 12, key="mlop")
+        tf, of = st.columns(2)
+        with tf:
+            tform = st.text_input("Your form", value="WWDLW", key="mltf")
+        with of:
+            oform = st.text_input("Opp form", value="LDLLD", key="mlof")
+
+        if st.button("Run ML validation", key="ml_run_val"):
+            ctx = Context(
+                stage=MatchStage(stg),
+                fav_status=FavStatus.FAVOURITE if (fav_sel=="Favourite") else FavStatus.UNDERDOG,
+                venue=Venue(vv),
+                score_state=ScoreState(sc),
+                team_position=int(tp), opponent_position=int(op),
+                team_form=tform, opponent_form=oform,
+                auto_fav_status=bool(fav_auto),
+            )
+            if fav_auto:
+                try:
+                    fav, fav_expl = detect_fav_status(ctx)
+                    ctx.fav_status = fav
+                    st.caption(f"Auto fav: {fav.value} — {fav_expl}")
+                except Exception as e:
+                    st.warning(f"Fav detect failed: {e}")
+            try:
+                tier, edge, _ = detect_matchup_tier(ctx)
+            except Exception:
+                tier, edge = None, None
+            rec = recommend(ctx)
+            st.write({
+                "rules": {"gesture": rec.gesture, "shout": getattr(rec.shout, 'value', str(rec.shout))},
+                "tier": getattr(tier, 'value', None),
+                "edge": edge,
+            })
+            # ML probs (if models exist)
+            feats = extract_features(ctx, getattr(tier, 'value', None), edge)
+            vec = to_vector_row(feats)
+            gmod = load_model(mod_dir, "gesture")
+            smod = load_model(mod_dir, "shout")
+            gprobs = predict_proba(gmod, vec) if gmod else None
+            sprobs = predict_proba(smod, vec) if smod else None
+            st.json({"gesture_proba": gprobs or {}, "shout_proba": sprobs or {}})
+    st.markdown("##### Preview detection (uses saved config)")
+    colp, colq, colr = st.columns(3)
+    with colp:
+        venue = st.selectbox("Venue", ["Home","Away"], index=0)
+        team_pos = st.number_input("Your position", 1, 24, 6)
+        opp_pos = st.number_input("Opp position", 1, 24, 12)
+    with colq:
+        team_form = st.text_input("Your form (5 chars W/D/L)", value="WWDLW")
+        opp_form = st.text_input("Opp form (5 chars W/D/L)", value="LDLLD")
+    with colr:
+        xg_for = st.number_input("xG For", 0.0, 10.0, 0.0, 0.05)
+        xg_against = st.number_input("xG Against", 0.0, 10.0, 0.0, 0.05)
+        possession = st.number_input("Possession %", 0, 100, 50)
+
+    sample_ctx = Context(
+        stage=MatchStage.PRE_MATCH,
+        fav_status=FavStatus.FAVOURITE,
+        venue=Venue(venue),
+        team_position=int(team_pos), opponent_position=int(opp_pos),
+        team_form=team_form, opponent_form=opp_form,
+        xg_for=float(xg_for), xg_against=float(xg_against),
+        possession_pct=float(possession),
+        auto_fav_status=True,
+    )
+    try:
+        fav, fav_expl = detect_fav_status(sample_ctx)
+        st.info(f"Favourite detection: {fav.value} — {fav_expl}")
+    except Exception as e:
+        st.warning(f"Favourite detection failed: {e}")
+    try:
+        tier, edge, tex = detect_matchup_tier(sample_ctx)
+        st.caption(f"Tier: {tier.value} • Edge: {edge:.2f}")
+        with st.expander("Tier explanation"):
+            st.write(tex)
+    except Exception as e:
+        st.warning(f"Tier calc failed: {e}")
+
+    st.markdown("---")
+    with st.expander("🔎 Rule hit preview (sample context)", expanded=False):
+        pc1, pc2, pc3, pc4 = st.columns(4)
+        with pc1:
+            p_stage = st.selectbox("Stage", [s.value for s in MatchStage if s in (MatchStage.PRE_MATCH, MatchStage.EARLY, MatchStage.MID, MatchStage.LATE, MatchStage.VERY_LATE, MatchStage.HALF_TIME, MatchStage.FULL_TIME)], index=0)
+        with pc2:
+            p_venue = st.selectbox("Venue", ["Home","Away"], index=0, key="prev_venue")
+        with pc3:
+            p_auto = st.checkbox("Auto-detect favourite", value=True, key="prev_auto")
+        with pc4:
+            p_fav = st.selectbox("Status", ["Favourite","Underdog"], index=0, disabled=p_auto, key="prev_fav")
+
+        sc1, sc2, sc3 = st.columns(3)
+        with sc1:
+            p_score = st.selectbox("Score state", ["Drawing","Winning","Losing"], index=0)
+        with sc2:
+            p_team_pos = st.number_input("Your pos", 1, 24, 7, key="prev_tpos")
+        with sc3:
+            p_opp_pos = st.number_input("Opp pos", 1, 24, 5, key="prev_opos")
+
+        sf1, sf2 = st.columns(2)
+        with sf1:
+            p_team_form = st.text_input("Your form", value="WWDLW", key="prev_tform")
+        with sf2:
+            p_opp_form = st.text_input("Opp form", value="LDLLD", key="prev_oform")
+
+        if st.button("Run preview", key="run_rule_preview"):
+            ctx = Context(
+                stage=MatchStage(p_stage),
+                fav_status=FavStatus.FAVOURITE if p_fav == "Favourite" else FavStatus.UNDERDOG,
+                venue=Venue(p_venue),
+                score_state=ScoreState(p_score),
+                team_position=int(p_team_pos), opponent_position=int(p_opp_pos),
+                team_form=p_team_form, opponent_form=p_opp_form,
+                auto_fav_status=bool(p_auto),
+            )
+            try:
+                if p_auto:
+                    fav, fav_expl = detect_fav_status(ctx)
+                    ctx.fav_status = fav
+                    st.info(f"Auto status: {fav.value} — {fav_expl}")
+                tier, edge, tex = detect_matchup_tier(ctx)
+                st.caption(f"Tier: {tier.value} • Edge: {edge:.2f}")
+                rec = recommend(ctx)
+                if rec is None:
+                    st.warning("No base rule matched.")
+                else:
+                    st.success("Rule matched and recommendation built.")
+                    st.write({
+                        "mentality": rec.mentality.value,
+                        "gesture": rec.gesture,
+                        "shout": rec.shout.value if hasattr(rec.shout, 'value') else str(rec.shout),
+                        "team_talk": rec.team_talk,
+                    })
+                    if getattr(rec, "trace", None):
+                        st.code("\n".join(rec.trace[:5]), language="text")
+            except Exception as e:
+                st.error(f"Preview failed: {e}")
 
 st.divider()# Import/Export Section
 col1, col2 = st.columns(2)

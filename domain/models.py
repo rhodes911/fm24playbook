@@ -223,6 +223,8 @@ class Recommendation:
     nudges: List[str] = field(default_factory=list)
     # Optional unit-level notes (e.g., "DEF: sympathise")
     unit_notes: Dict[str, str] = field(default_factory=dict)
+    # Verbose trace for debugging: rule match, overrides and adjustments applied
+    trace: List[str] = field(default_factory=list)
     
     @property
     def mentality_value(self) -> int:
@@ -245,6 +247,8 @@ class RuleCondition(BaseModel):
     venue: Optional[Venue] = None
     scoreState: Optional[ScoreState] = None
     special: Optional[List[SpecialSituation]] = None
+    # Optional granular matchup tiers; when present, a rule applies only if current tier is in this list
+    tier: Optional[List[FavTier]] = None
 
 
 class RuleRecommendation(BaseModel):

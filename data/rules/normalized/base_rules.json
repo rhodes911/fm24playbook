@@ -21,6 +21,24 @@
     "when": {
       "stage": "PreMatch",
       "favStatus": "Favourite",
+      "venue": "Home",
+      "tier": ["SlightFavourite", "Even"]
+    },
+    "recommendation": {
+      "mentality": "Positive",
+      "teamTalk": "We should be winning this — go out and show why.",
+      "gesture": "Point Finger",
+      "shout": "None",
+      "audience": "Team",
+      "notes": [
+        "Tier-aware: slight edge, keep standards and probe early"
+      ]
+    }
+  },
+  {
+    "when": {
+      "stage": "PreMatch",
+      "favStatus": "Favourite",
       "venue": "Away"
     },
     "recommendation": {
@@ -234,6 +252,24 @@
       "audience": "Team",
       "notes": [
         "Raise tempo next 10' then reassess"
+      ]
+    }
+  },
+  {
+    "when": {
+      "stage": "HalfTime",
+      "scoreState": "Drawing",
+      "favStatus": "Favourite",
+      "tier": ["SlightFavourite", "Even"]
+    },
+    "recommendation": {
+      "mentality": "Balanced",
+      "teamTalk": "I expect more — we can improve.",
+      "gesture": "Outstretched Arms",
+      "shout": "None",
+      "audience": "Team",
+      "notes": [
+        "Tier-aware: with only a slight edge, emphasise quality over risk in the next 10'"
       ]
     }
   },

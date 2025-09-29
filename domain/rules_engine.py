@@ -4,10 +4,12 @@ This module has no Streamlit/UI code and can be tested independently.
 """
 from __future__ import annotations
 
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple, Dict, Any
 from pathlib import Path
 import json
 from dataclasses import replace
+import csv
+from datetime import datetime, timezone
 
 from .models import (
     Context, Recommendation,
@@ -21,6 +23,7 @@ from .tone_matrix import select_tones
 from .segmentation import analyze_units
 from .nudges import generate_nudges
 from .synergy import score_synergy, suggest_gestures
+from .ml_assist import extract_features, to_vector_row, load_model, predict_proba
 
 MENTALITY_ORDER = [
     Mentality.DEFENSIVE,
@@ -316,7 +319,13 @@ def harmonize_talk_with_gesture(context: Context, rec: Recommendation) -> Recomm
     tone = _gesture_tone(rec.gesture)
     phrase = _select_talk_phrase(context, tone, rec.gesture)
     if phrase:
-        return replace(rec, team_talk=phrase)
+        out = replace(rec, team_talk=phrase)
+        try:
+            tone = _gesture_tone(out.gesture)
+            out.trace.append(f"Phrase harmonized to gesture tone: tone={tone}")
+        except Exception:
+            pass
+        return out
     return rec
 
 
@@ -369,12 +378,26 @@ def adapt_talk_phrase_with_stats(context: Context, rec: Recommendation) -> Recom
 
     if not overlay_key:
         return rec
+    # Tier-informed tone bias: when evenly matched or slight underdog but with positive edge,
+    # prefer calm "push on" phrasing rather than assertive.
+    try:
+        _tier_now, _edge_now, _ = detect_matchup_tier(context)
+    except Exception:
+        _tier_now, _edge_now = None, None
+    tone_to_use = tone
+    if overlay_key == "push_on" and _tier_now in (FavTier.EVEN, FavTier.SLIGHT_UNDERDOG):
+        if (_edge_now is not None and _edge_now > 0.2):
+            tone_to_use = "calm"
     # Pick tone-specific phrase from JSON; fallback to calm if tone not present  
-    new_phrase = _get_stats_overlay_phrase(overlay_key, tone)
+    new_phrase = _get_stats_overlay_phrase(overlay_key, tone_to_use)
     if not new_phrase:
         return rec
     # Replace the phrase with the overlay version
-    return replace(rec, team_talk=new_phrase)
+    out = replace(rec, team_talk=new_phrase)
+    out.trace.append(f"Stats overlay applied: key={overlay_key}, tone={tone_to_use}")
+    if tone_to_use != tone and overlay_key == "push_on":
+        out.trace.append("Tier-informed: calm push-on phrasing (even/slight underdog with positive edge)")
+    return out
 
 
 def _is_praise_context(context: Context) -> bool:
@@ -459,7 +482,12 @@ def adjust_gesture_for_context(context: Context, rec: Recommendation) -> Recomme
         g = "Hands Together"
 
     if g != rec.gesture:
-        return replace(rec, gesture=g)
+        out = replace(rec, gesture=g)
+        try:
+            out.trace.append(f"Gesture adjusted for context: {rec.gesture} -> {g}")
+        except Exception:
+            pass
+        return out
     return rec
 
 
@@ -473,6 +501,10 @@ def enforce_prematch_mentality_cap(context: Context, rec: Recommendation) -> Rec
     if rec.mentality in (Mentality.ATTACKING, Mentality.VERY_ATTACKING):
         capped = replace(rec, mentality=Mentality.POSITIVE)
         capped.notes.append("Pre-match cap: start no higher than Positive.")
+        try:
+            capped.trace.append("Pre-match mentality capped to Positive")
+        except Exception:
+            pass
         return capped
     return rec
 
@@ -499,27 +531,68 @@ def choose_inplay_shout(context: Context, rec: Recommendation) -> Recommendation
         if context.fav_status == FavStatus.UNDERDOG:
             result.shout = Shout.PRAISE
             result.notes.append("Underdog winning: Praise to reinforce confidence.")
+            try:
+                result.trace.append("In-play shout set: Praise (underdog winning)")
+            except Exception:
+                pass
         elif context.stage in (MatchStage.LATE, MatchStage.VERY_LATE):
             result.shout = Shout.FOCUS
             result.notes.append("Protect the lead late: Focus.")
+            try:
+                result.trace.append("In-play shout set: Focus (protect late lead)")
+            except Exception:
+                pass
     elif context.score_state == ScoreState.DRAWING:
         if context.fav_status == FavStatus.FAVOURITE:
-            result.shout = Shout.DEMAND_MORE
-            result.notes.append("Favourite drawing: Demand More to push on.")
+            # Tier-informed nuance: if we're a strong favourite and it's very late, composure > push
+            try:
+                _tier, _, _ = detect_matchup_tier(context)
+            except Exception:
+                _tier = None
+            if context.stage == MatchStage.VERY_LATE and _tier == FavTier.STRONG_FAVOURITE:
+                result.shout = Shout.FOCUS
+                result.notes.append("Strong favourite drawing very late: Focus to stay composed for the moment.")
+                try:
+                    result.trace.append("Tier-aware in-play shout: Focus (strong favourite drawing very late)")
+                except Exception:
+                    pass
+            else:
+                result.shout = Shout.DEMAND_MORE
+                result.notes.append("Favourite drawing: Demand More to push on.")
+                try:
+                    result.trace.append("In-play shout set: Demand More (favourite drawing)")
+                except Exception:
+                    pass
         else:
             result.shout = Shout.ENCOURAGE
             result.notes.append("Underdog drawing: Encourage to keep belief.")
+            try:
+                result.trace.append("In-play shout set: Encourage (underdog drawing)")
+            except Exception:
+                pass
     elif context.score_state == ScoreState.LOSING:
         if context.fav_status == FavStatus.FAVOURITE:
             if context.stage in (MatchStage.EARLY, MatchStage.MID):
                 result.shout = Shout.FIRE_UP
                 result.notes.append("Favourite losing early: Fire Up for reaction.")
+                try:
+                    result.trace.append("In-play shout set: Fire Up (favourite losing early)")
+                except Exception:
+                    pass
             else:
                 result.shout = Shout.DEMAND_MORE
                 result.notes.append("Favourite losing late: Demand More to chase.")
+                try:
+                    result.trace.append("In-play shout set: Demand More (favourite losing late)")
+                except Exception:
+                    pass
         else:
             result.shout = Shout.ENCOURAGE
             result.notes.append("Underdog losing: Encourage to avoid collapse.")
+            try:
+                result.trace.append("In-play shout set: Encourage (underdog losing)")
+            except Exception:
+                pass
     return result
 
 
@@ -563,8 +636,53 @@ def apply_time_score_heuristics(context: Context, rec: Recommendation) -> Recomm
     result = replace(rec, mentality=new_mentality)
     if delta > 0:
         result.notes.append("Late-game push based on scoreline and status.")
+        try:
+            result.trace.append("Late-game mentality +1 applied")
+        except Exception:
+            pass
     else:
         result.notes.append("Late-game control: tighten up with a narrow lead.")
+        try:
+            result.trace.append("Late-game mentality -1 applied (protect 1-goal lead)")
+        except Exception:
+            pass
+    return result
+
+
+def apply_tier_informed_talk_adjustments(context: Context, rec: Recommendation) -> Recommendation:
+    """Modulate talk gesture/phrasing intensity by matchup tier and edge.
+
+    Goals:
+    - SlightFavourite drawing at HT → slightly softer than strong favourite (Hands on Hips vs Point Finger).
+    - Even/SlightUnderdog with positive edge at HT → supportive perseverance (Hands Together) and push-on vibe.
+    """
+    if context.stage not in (MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME):
+        return rec
+    try:
+        tier, edge, _ = detect_matchup_tier(context)
+    except Exception:
+        return rec
+    result = replace(rec)
+    # Half-time only for these tweaks
+    if context.stage == MatchStage.HALF_TIME:
+        if context.score_state == ScoreState.DRAWING:
+            # Slight favourite: moderate assertiveness
+            if tier == FavTier.SLIGHT_FAVOURITE and result.gesture == "Point Finger":
+                result.gesture = "Hands on Hips"
+                try:
+                    result.trace.append("Tier-informed: slight favourite at HT drawing → soften to Hands on Hips")
+                except Exception:
+                    pass
+            # Even or slight underdog: if edge positive, go supportive perseverance
+            if tier in (FavTier.EVEN, FavTier.SLIGHT_UNDERDOG) and (edge is not None and edge > 0.2):
+                if result.gesture != "Hands Together":
+                    result.gesture = "Hands Together"
+                    try:
+                        result.trace.append("Tier-informed: even/slight underdog with positive edge → Hands Together (supportive)")
+                    except Exception:
+                        pass
+                # Add a light note to nudge phrasing
+                result.notes.append("Even but on top: keep belief and push on.")
     return result
 
 
@@ -599,20 +717,36 @@ def apply_live_stats_heuristics(context: Context, rec: Recommendation) -> Recomm
         result.notes.append("We're creating more â€” keep belief and maintain intensity.")
         if result.shout == Shout.NONE and context.stage not in (MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME):
             result.shout = Shout.ENCOURAGE
+            try:
+                result.trace.append("Live stats: outshooting → Encourage")
+            except Exception:
+                pass
 
     # Being out-shot and protecting a lead late
     if context.score_state == ScoreState.WINNING and (sa > sf + 4 or soa > sof + 2) and context.stage in (MatchStage.LATE, MatchStage.VERY_LATE):
         result.notes.append("They're peppering us â€” tighten up and concentrate.")
         if result.shout == Shout.NONE:
             result.shout = Shout.FOCUS
+            try:
+                result.trace.append("Live stats: under siege late → Focus")
+            except Exception:
+                pass
 
     # Low possession while favourite and not winning
     if poss is not None and poss < 40 and context.fav_status == FavStatus.FAVOURITE and context.score_state in (ScoreState.DRAWING, ScoreState.LOSING):
         result.notes.append("Possession low for a favourite â€” consider calming it down and keeping it simple.")
+        try:
+            result.trace.append("Live stats note: low possession as favourite")
+        except Exception:
+            pass
 
     # Big xG delta in our favour but not leading
     if (xg_for - xg_against) > 0.6 and context.score_state in (ScoreState.DRAWING, ScoreState.LOSING):
         result.notes.append("xG says we're on top â€” keep pushing, the goal should come.")
+        try:
+            result.trace.append("Live stats note: big xG delta in favour")
+        except Exception:
+            pass
 
     return result
 
@@ -820,6 +954,15 @@ def pick_base_rule(context: Context, rules: List[PlaybookRule]) -> Optional[Reco
         if w.stage != context.stage:
             continue
         score += 1
+        # Optional tier matching: when present, require current tier in the set
+        if getattr(w, 'tier', None):
+            try:
+                _tier, _, _ = detect_matchup_tier(context)
+            except Exception:
+                _tier = None
+            if _tier is None or _tier not in w.tier:
+                continue
+            score += 1
         # Optional fields increase specificity
         if w.favStatus is not None:
             if context.auto_fav_status:
@@ -853,7 +996,7 @@ def pick_base_rule(context: Context, rules: List[PlaybookRule]) -> Optional[Reco
     candidates.sort(key=lambda x: x[0], reverse=True)
     top = candidates[0][1]
     rec = top.recommendation
-    return Recommendation(
+    base = Recommendation(
         mentality=rec.mentality,
         team_talk=rec.teamTalk,
         gesture=rec.gesture,
@@ -861,6 +1004,15 @@ def pick_base_rule(context: Context, rules: List[PlaybookRule]) -> Optional[Reco
         talk_audience=rec.audience,
         notes=list(rec.notes),
     )
+    try:
+        t, _, _ = detect_matchup_tier(context)
+        tier_str = t.value
+    except Exception:
+        tier_str = "?"
+    base.trace.append(
+        f"Base rule matched: stage={top.when.stage.value} fav={getattr(top.when.favStatus,'value',None)} venue={getattr(top.when.venue,'value',None)} score={getattr(top.when.scoreState,'value',None)} tier_req={(','.join([x.value for x in (top.when.tier or [])]) if getattr(top.when,'tier',None) else '-')}, tier_now={tier_str}"
+    )
+    return base
 
 
 def _score_form(form: Optional[str]) -> int:
@@ -881,22 +1033,34 @@ def apply_context_stats_adjustments(context: Context, rec: Recommendation) -> Re
     If base shout is None, suggest Demand More for +1, Encourage for -1.
     """
     total = 0
+    parts: List[str] = []
     # Position bucket
     if context.team_position is not None and context.opponent_position is not None:
         pos_diff = context.opponent_position - context.team_position
         if pos_diff >= 8:
             total += 1
+            parts.append("pos +1 (≥8 better)")
         elif pos_diff <= -8:
             total -= 1
+            parts.append("pos -1 (≤-8 worse)")
+        else:
+            parts.append("pos 0")
     # Form bucket
     form_diff = _score_form(context.team_form) - _score_form(context.opponent_form)
     if form_diff >= 2:
         total += 1
+        parts.append("form +1 (≥2)")
     elif form_diff <= -2:
         total -= 1
+        parts.append("form -1 (≤-2)")
+    else:
+        parts.append("form 0")
     # Home advantage
     if context.venue == Venue.HOME:
         total += 1
+        parts.append("home +1")
+    else:
+        parts.append("away +0")
 
     delta = 0
     if total >= 2:
@@ -905,6 +1069,11 @@ def apply_context_stats_adjustments(context: Context, rec: Recommendation) -> Re
         delta = -1
 
     if delta == 0:
+        # Still add a trace breadcrumb for transparency
+        try:
+            rec.trace.append("Context stats check: no mentality change (" + ", ".join(parts) + ")")
+        except Exception:
+            pass
         return rec
 
     # Apply mentality delta
@@ -912,15 +1081,23 @@ def apply_context_stats_adjustments(context: Context, rec: Recommendation) -> Re
     new_mentality = clamp_mentality(mval)
     result = replace(rec, mentality=new_mentality)
 
-    # Suggest shout only if none already set
-    if result.shout == Shout.NONE:
+    # Suggest shout only for in-play stages and if none already set
+    if result.shout == Shout.NONE and context.stage not in (MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME):
         result.shout = Shout.DEMAND_MORE if delta > 0 else Shout.ENCOURAGE
 
     # Add explanatory note
     if delta > 0:
         result.notes.append("Favorable position/form and home advantage suggest a more assertive approach.")
+        try:
+            result.trace.append("Context stats: mentality +1 (" + ", ".join(parts) + ")")
+        except Exception:
+            pass
     else:
         result.notes.append("Position/form context suggests caution (especially away).")
+        try:
+            result.trace.append("Context stats: mentality -1 (" + ", ".join(parts) + ")")
+        except Exception:
+            pass
 
     return result
 
@@ -953,6 +1130,12 @@ def apply_special_overrides(context: Context, rec: Recommendation, specials: Lis
         
         if key and key in s.overrides:
             ov = s.overrides[key]
+            before = {
+                "team_talk": result.team_talk,
+                "gesture": result.gesture,
+                "shout": result.shout,
+                "mentality": result.mentality,
+            }
             if ov.teamTalk:
                 result.team_talk = ov.teamTalk
             if ov.gesture:
@@ -961,13 +1144,29 @@ def apply_special_overrides(context: Context, rec: Recommendation, specials: Lis
                 result.shout = ov.shout
             if ov.mentality:
                 result.mentality = ov.mentality
+            # Trace what changed
+            try:
+                after = {
+                    "team_talk": result.team_talk,
+                    "gesture": result.gesture,
+                    "shout": result.shout,
+                    "mentality": result.mentality,
+                }
+                changed = [k for k in after if after[k] != before[k]]
+                if changed:
+                    result.trace.append(
+                        f"Special override applied: {s.tag.value} • key={key} • changed={','.join(changed)}"
+                    )
+            except Exception:
+                pass
     return result
 
 
 def apply_reaction_adjustments(context: Context, rec: Recommendation, reactions: List[ReactionRule]) -> Recommendation:
     """Apply all reaction adjustments: teamTalk/gesture/shout overwrites if present, notes merged, mentality delta summed."""
     result = replace(rec)
-    mentality_value = MENTALITY_TO_VALUE[result.mentality]
+    start_mentality_val = MENTALITY_TO_VALUE[result.mentality]
+    mentality_value = start_mentality_val
 
     for r in reactions:
         if r.reaction in context.player_reactions:
@@ -981,9 +1180,24 @@ def apply_reaction_adjustments(context: Context, rec: Recommendation, reactions:
             if adj.notes:
                 result.notes.extend(adj.notes)
             mentality_value += adj.mentalityDelta
+            # Trace for each reaction hit
+            try:
+                result.trace.append(
+                    f"Reaction applied: {r.reaction.value} • Δmentality={adj.mentalityDelta}"
+                )
+            except Exception:
+                pass
 
     # clamp mentality
     result.mentality = clamp_mentality(mentality_value)
+    # Trace overall mentality change if any
+    try:
+        end_val = MENTALITY_TO_VALUE[result.mentality]
+        if end_val != start_mentality_val:
+            delta_total = end_val - start_mentality_val
+            result.trace.append(f"Reactions total mentality change: {delta_total}")
+    except Exception:
+        pass
     # dedupe notes while preserving order
     seen = set()
     deduped = []
@@ -1011,6 +1225,11 @@ def recommend(context: Context) -> Optional[Recommendation]:
     if context.auto_fav_status:
         fav, fav_explanation = detect_fav_status(context)
         context.fav_status = fav
+    # Compute matchup tier/edge upfront for transparency (used in traces/notes)
+    try:
+        _tier_now, _edge_now, _tier_expl = detect_matchup_tier(context)
+    except Exception:
+        _tier_now, _edge_now, _tier_expl = None, None, None
     
     # Load JSON configuration for rules processing
     base_rules = _load_base_rules()
@@ -1019,6 +1238,14 @@ def recommend(context: Context) -> Optional[Recommendation]:
     base = pick_base_rule(context, base_rules)
     if base is None:
         return None
+    # Log tier/edge explanation early
+    try:
+        if _tier_now is not None:
+            base.trace.append(f"Tier detected: {_tier_now.value} (edge {round(_edge_now,2)})")
+        if _tier_expl:
+            base.trace.append("Tier explain: " + _tier_expl)
+    except Exception:
+        pass
     with_specials = apply_special_overrides(context, base, special_overrides)
     # No shouts at PreMatch, HalfTime, FullTime â€” convert to statements
     if context.stage in (MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME):
@@ -1026,6 +1253,10 @@ def recommend(context: Context) -> Optional[Recommendation]:
     with_stats = apply_context_stats_adjustments(context, with_specials)
     if fav_explanation:
         with_stats.notes.append(f"Auto status: {fav_explanation}")
+        try:
+            with_stats.trace.append("Auto favourite detection: " + fav_explanation)
+        except Exception:
+            pass
     # In-play shout selection if none set yet
     with_shout = choose_inplay_shout(context, with_stats)
     with_time = apply_time_score_heuristics(context, with_shout)
@@ -1036,6 +1267,8 @@ def recommend(context: Context) -> Optional[Recommendation]:
     final = apply_reaction_adjustments(context, with_stats_live, reaction_rules)
     # Post-adjust gesture to avoid praise-coded OA when behind and pick assertive for favourites
     final = adjust_gesture_for_context(context, final)
+    # Tier-informed talk intensity and supportive bias
+    final = apply_tier_informed_talk_adjustments(context, final)
     final = harmonize_talk_with_gesture(context, final)
     # Tone-aware stats overlays for the phrase itself
     final = adapt_talk_phrase_with_stats(context, final)
@@ -1112,4 +1345,170 @@ def recommend(context: Context) -> Optional[Recommendation]:
     # Default talk audience to Team at talk stages if not set
     if context.stage in (MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME) and not final.talk_audience:
         final.talk_audience = TalkAudience.TEAM
+    # Optional ML feature logging (pre-ML)
+    try:
+        _maybe_log_ml_features(context, final, ab_stage="pre-ml")
+    except Exception:
+        pass
+    # Optional ML inference re-ranking (guardrailed)
+    try:
+        final = _maybe_apply_ml_inference(context, final, _edge_now)
+    except Exception:
+        pass
+    # Optional ML feature logging (post-ML, with suggestion metadata if any)
+    try:
+        _maybe_log_ml_features(context, final, ab_stage="post-ml")
+    except Exception:
+        pass
     return final
+
+
+def _maybe_log_ml_features(context: Context, rec: Recommendation, ab_stage: str = "") -> None:
+    """If enabled in config, append a CSV row of features/outcomes for offline ML.
+
+    Config (engine_config.json):
+    {
+      "ml_assist": {
+        "log_features": false,
+        "path": "data/logs/ml/features.csv"
+      }
+    }
+    """
+    cfg_fp = Path(__file__).resolve().parent.parent / "data" / "rules" / "normalized" / "engine_config.json"
+    cfg = json.loads(cfg_fp.read_text(encoding="utf-8")) if cfg_fp.exists() else {}
+    ml = cfg.get("ml_assist", {}) or {}
+    if not bool(ml.get("log_features", False)):
+        return
+    rel_path = ml.get("path", "data/logs/ml/features.csv")
+    out_fp = Path(__file__).resolve().parent.parent / rel_path
+    out_fp.parent.mkdir(parents=True, exist_ok=True)
+    # Build a minimal, safe feature set
+    try:
+        tier, edge, _ = detect_matchup_tier(context)
+        tier_val = tier.value
+    except Exception:
+        tier_val, edge = "?", None
+    # Try to retrieve ML suggestion meta (if any was computed)
+    ml_meta = None
+    for alt in getattr(rec, "alternatives", []) or []:
+        if isinstance(alt, dict) and alt.get("type") == "ml-meta":
+            ml_meta = alt
+            break
+
+    row = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "stage": context.stage.value,
+        "venue": context.venue.value,
+        "fav_status": context.fav_status.value,
+        "score_state": getattr(context.score_state, "value", ""),
+        "team_pos": context.team_position or "",
+        "opp_pos": context.opponent_position or "",
+        "team_form": context.team_form or "",
+        "opp_form": context.opponent_form or "",
+        "xg_for": context.xg_for or "",
+        "xg_against": context.xg_against or "",
+        "shots_for": context.shots_for or "",
+        "shots_against": context.shots_against or "",
+        "possession": context.possession_pct or "",
+        "tier": tier_val,
+        "edge": edge if edge is not None else "",
+        "mentality": rec.mentality.value,
+        "gesture": rec.gesture,
+        "shout": rec.shout.value if hasattr(rec.shout, 'value') else str(rec.shout),
+        "talk": rec.team_talk or "",
+        "ab_stage": ab_stage,
+        # ML metadata (may be empty on pre-ml)
+        "ml_g_suggested": (ml_meta or {}).get("g_suggested", ""),
+        "ml_g_p": (ml_meta or {}).get("g_p", ""),
+        "ml_g_applied": (ml_meta or {}).get("g_applied", ""),
+        "ml_s_suggested": (ml_meta or {}).get("s_suggested", ""),
+        "ml_s_p": (ml_meta or {}).get("s_p", ""),
+        "ml_s_applied": (ml_meta or {}).get("s_applied", ""),
+    }
+    write_header = not out_fp.exists()
+    with out_fp.open("a", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(row.keys()))
+        if write_header:
+            w.writeheader()
+        w.writerow(row)
+
+
+def _maybe_apply_ml_inference(context: Context, rec: Recommendation, edge: Optional[float]) -> Recommendation:
+    """If enabled, load gesture/shout models and softly re-rank outputs without breaking guardrails.
+
+    Uses engine_config.json/ml_assist:
+      - inference_enabled: bool
+      - model_dir: directory with gesture.joblib and/or shout.joblib
+      - weight: blending factor [0..1] determining how much to trust ML suggestion
+    Guardrails:
+      - Never change talk stages' shout (remains NONE)
+      - Only consider gestures present in catalogs; avoid Outstretched Arms in non-praise contexts
+      - If model missing or low confidence (<0.4), skip
+    """
+    cfg_fp = Path(__file__).resolve().parent.parent / "data" / "rules" / "normalized" / "engine_config.json"
+    cfg = json.loads(cfg_fp.read_text(encoding="utf-8")) if cfg_fp.exists() else {}
+    ml = cfg.get("ml_assist", {}) or {}
+    if not bool(ml.get("inference_enabled", False)):
+        return rec
+    # Stage toggle
+    stages = ml.get("stages", {}) or {}
+    allow_stage = bool(stages.get(context.stage.value, True))
+    if not allow_stage:
+        return rec
+    weight = float(ml.get("weight", 0.25))
+    model_dir = Path(__file__).resolve().parent.parent / str(ml.get("model_dir", "data/ml"))
+    # Prepare features vector
+    try:
+        tier, _, _ = detect_matchup_tier(context)
+        tier_val = tier.value
+    except Exception:
+        tier_val = None
+    feats = extract_features(context, tier_val, edge)
+    vec = to_vector_row(feats)
+    out = replace(rec)
+    # Gesture inference
+    g_model = load_model(model_dir, "gesture")
+    g_probs = predict_proba(g_model, vec) if g_model is not None else None
+    ml_meta: Dict[str, Any] = {}
+    if g_probs:
+        # pick best non-OA in non-praise contexts
+        sorted_g = sorted(g_probs.items(), key=lambda kv: kv[1], reverse=True)
+        best_gesture, best_p = sorted_g[0]
+        if not _is_praise_context(context) and best_gesture == "Outstretched Arms":
+            # find next best
+            for g, p in sorted_g[1:]:
+                if g != "Outstretched Arms":
+                    best_gesture, best_p = g, p
+                    break
+        if best_p >= 0.4 and best_gesture and best_gesture != out.gesture:
+            # blend by weight through alternatives metadata as a nudge
+            if weight >= 0.5:
+                out.gesture = best_gesture
+                try:
+                    out.trace.append(f"ML re-rank: gesture → {best_gesture} (p={best_p:.2f}, w={weight})")
+                except Exception:
+                    pass
+            else:
+                out.alternatives.append({"type": "ml-suggested", "gesture": best_gesture, "p": round(best_p,2)})
+            ml_meta.update({"g_suggested": best_gesture, "g_p": round(best_p,2), "g_applied": weight >= 0.5})
+    # Shout inference (in-play only)
+    if context.stage not in (MatchStage.PRE_MATCH, MatchStage.HALF_TIME, MatchStage.FULL_TIME):
+        s_model = load_model(model_dir, "shout")
+        s_probs = predict_proba(s_model, vec) if s_model is not None else None
+        if s_probs:
+            sorted_s = sorted(s_probs.items(), key=lambda kv: kv[1], reverse=True)
+            best_shout, sp = sorted_s[0]
+            # Never override guardrails like Praise when losing, etc. Keep simple: only suggest if NONE
+            if sp >= 0.45 and out.shout == Shout.NONE:
+                try:
+                    out.shout = Shout(best_shout)
+                    out.trace.append(f"ML re-rank: shout → {best_shout} (p={sp:.2f}, w={weight})")
+                except Exception:
+                    pass
+                ml_meta.update({"s_suggested": best_shout, "s_p": round(sp,2), "s_applied": True})
+            else:
+                ml_meta.update({"s_suggested": best_shout, "s_p": round(sp,2), "s_applied": False})
+    # Attach ML meta for logging
+    if ml_meta:
+        out.alternatives.append({"type": "ml-meta", **ml_meta})
+    return out
